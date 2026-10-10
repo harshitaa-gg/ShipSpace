@@ -379,6 +379,7 @@ CREATE TRIGGER trg_record_booking_status_history
 -- ============================================================================
 -- 6. APPLICATION HELPER PROCEDURE: CANCEL BOOKING
 -- Sets acting user and cancellation reason in session context before updating.
+-- Relies on trg_restore_capacity_on_cancellation to restore capacity and reopen listing.
 -- ============================================================================
 CREATE OR REPLACE PROCEDURE sp_cancel_booking(
     p_booking_id BIGINT,
@@ -387,16 +388,110 @@ CREATE OR REPLACE PROCEDURE sp_cancel_booking(
 )
 LANGUAGE plpgsql
 AS $$
+DECLARE
+    v_booking booking%ROWTYPE;
 BEGIN
-    PERFORM set_config('shipspace.current_user_id', p_user_id::text, true);
-    PERFORM set_config('shipspace.status_change_reason', p_reason, true);
-
-    UPDATE booking
-    SET status = 'cancelled'
-    WHERE id = p_booking_id;
+    -- 1. Explicitly acquire row-level exclusive lock on booking
+    SELECT * INTO v_booking
+    FROM booking
+    WHERE id = p_booking_id
+    FOR UPDATE;
 
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Booking % does not exist', p_booking_id;
     END IF;
+
+    -- 2. Pre-check terminal statuses before attempting update
+    IF v_booking.status = 'cancelled' THEN
+        RAISE EXCEPTION 'Booking % has already been cancelled and cannot be cancelled again', p_booking_id;
+    END IF;
+
+    IF v_booking.status = 'completed' THEN
+        RAISE EXCEPTION 'Booking % is already completed and cannot be cancelled', p_booking_id;
+    END IF;
+
+    -- 3. Set acting user and cancellation reason in session context
+    PERFORM set_config('shipspace.current_user_id', p_user_id::text, true);
+    PERFORM set_config('shipspace.status_change_reason', p_reason, true);
+
+    -- 4. Update status (triggers handle capacity restoration & audit history under lock)
+    UPDATE booking
+    SET status = 'cancelled'
+    WHERE id = p_booking_id;
+END;
+$$;
+
+
+-- ============================================================================
+-- 7. APPLICATION HELPER PROCEDURE: CREATE BOOKING
+-- Provides a clean procedural API for application-level transactional booking.
+-- Explicitly acquires SELECT ... FOR UPDATE row lock on capacity_listing,
+-- validates status, cutoff, capacity, and cargo type, inserts booking, and
+-- relies on trg_validate_and_reserve_booking for atomic decrement and status update.
+-- ============================================================================
+CREATE OR REPLACE PROCEDURE sp_create_booking(
+    p_trader_id     BIGINT,
+    p_listing_id    BIGINT,
+    p_cargo_type_id BIGINT,
+    p_booked_cbm    NUMERIC(10, 2),
+    p_booked_weight NUMERIC(10, 2),
+    INOUT p_booking_id BIGINT DEFAULT NULL
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_listing capacity_listing%ROWTYPE;
+BEGIN
+    -- 1. Explicitly acquire row-level exclusive lock on capacity listing
+    SELECT * INTO v_listing
+    FROM capacity_listing
+    WHERE id = p_listing_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Listing % does not exist', p_listing_id;
+    END IF;
+
+    -- 2. Pre-check status
+    IF v_listing.status <> 'open' THEN
+        RAISE EXCEPTION 'Listing % is not open for booking (current status: %)',
+            p_listing_id, v_listing.status;
+    END IF;
+
+    -- 3. Pre-check cutoff date
+    IF CURRENT_DATE > v_listing.cutoff_date THEN
+        RAISE EXCEPTION 'Booking must be made on or before listing cutoff date % (current date: %)',
+            v_listing.cutoff_date, CURRENT_DATE;
+    END IF;
+
+    -- 4. Pre-check capacity under lock
+    IF p_booked_cbm > v_listing.available_cbm THEN
+        RAISE EXCEPTION 'Insufficient available CBM on listing %: requested %, available %',
+            p_listing_id, p_booked_cbm, v_listing.available_cbm;
+    END IF;
+
+    IF p_booked_weight > v_listing.available_weight THEN
+        RAISE EXCEPTION 'Insufficient available weight on listing %: requested %, available %',
+            p_listing_id, p_booked_weight, v_listing.available_weight;
+    END IF;
+
+    -- 5. Insert booking (trigger handles price calculation, capacity decrement & audit history)
+    INSERT INTO booking (
+        trader_id,
+        listing_id,
+        cargo_type_id,
+        booked_cbm,
+        booked_weight,
+        total_price,
+        status
+    ) VALUES (
+        p_trader_id,
+        p_listing_id,
+        p_cargo_type_id,
+        p_booked_cbm,
+        p_booked_weight,
+        0.00,
+        'confirmed'
+    ) RETURNING id INTO p_booking_id;
 END;
 $$;
