@@ -63,16 +63,16 @@ VALUES (
     'admin'
 );
 
--- Ports
-INSERT INTO port (name, country, un_locode) VALUES ('Jawaharlal Nehru Port', 'India', 'INNSA');
-INSERT INTO port (name, country, un_locode) VALUES ('Port of Singapore', 'Singapore', 'SGSIN');
-INSERT INTO port (name, country, un_locode) VALUES ('Port of Rotterdam', 'Netherlands', 'NLRTM');
+-- Ports (Unique test-suite UN/LOCODEs and names to avoid colliding with seed data)
+INSERT INTO port (name, country, un_locode) VALUES ('Test Origin Port Alpha', 'India', 'INZZ1');
+INSERT INTO port (name, country, un_locode) VALUES ('Test Destination Port Beta', 'Singapore', 'SGZZ2');
+INSERT INTO port (name, country, un_locode) VALUES ('Test Transit Port Gamma', 'Netherlands', 'NLZZ3');
 
--- Route (INNSA -> SGSIN)
+-- Route (INZZ1 -> SGZZ2)
 INSERT INTO route (origin_port_id, destination_port_id, typical_transit_days)
 VALUES (
-    (SELECT id FROM port WHERE un_locode = 'INNSA'),
-    (SELECT id FROM port WHERE un_locode = 'SGSIN'),
+    (SELECT id FROM port WHERE un_locode = 'INZZ1'),
+    (SELECT id FROM port WHERE un_locode = 'SGZZ2'),
     7
 );
 
@@ -90,7 +90,7 @@ INSERT INTO capacity_listing (
     (SELECT r.id FROM route r
      JOIN port p1 ON r.origin_port_id = p1.id
      JOIN port p2 ON r.destination_port_id = p2.id
-     WHERE p1.un_locode = 'INNSA' AND p2.un_locode = 'SGSIN'),
+     WHERE p1.un_locode = 'INZZ1' AND p2.un_locode = 'SGZZ2'),
     CURRENT_DATE + INTERVAL '10 days',
     CURRENT_DATE + INTERVAL '17 days',
     CURRENT_DATE + INTERVAL '5 days',
@@ -98,10 +98,10 @@ INSERT INTO capacity_listing (
     120.00, 150.00, 250.00, 'open'
 );
 
--- Listing Cargo Junction: Allow ONLY General Cargo on this listing
+-- Listing Cargo Junction: Allow ONLY General Cargo on this test listing
 INSERT INTO listing_cargo (listing_id, cargo_type_id)
 VALUES (
-    (SELECT id FROM capacity_listing LIMIT 1),
+    (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
     (SELECT id FROM cargo_type WHERE name = 'General Cargo')
 );
 
@@ -116,8 +116,8 @@ DO $$
 BEGIN
     INSERT INTO route (origin_port_id, destination_port_id, typical_transit_days)
     VALUES (
-        (SELECT id FROM port WHERE un_locode = 'INNSA'),
-        (SELECT id FROM port WHERE un_locode = 'INNSA'),
+        (SELECT id FROM port WHERE un_locode = 'INZZ1'),
+        (SELECT id FROM port WHERE un_locode = 'INZZ1'),
         3
     );
     INSERT INTO test_results (test_id, test_desc, status, details)
@@ -303,7 +303,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         999.00,
         5.00,
@@ -338,7 +338,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00,
         999.00,
@@ -373,7 +373,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'Hazardous Chemicals'),
         5.00,
         2.00,
@@ -402,7 +402,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status, booking_time
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00,
         2.00,
@@ -490,7 +490,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing WHERE status = 'open' LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00, 2.00, 0.00, 'confirmed'
     ) RETURNING id INTO v_b_id;
@@ -523,7 +523,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing WHERE status = 'open' LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00, 2.00, 0.00, 'confirmed'
     ) RETURNING id INTO v_b_id;
@@ -556,7 +556,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing WHERE status = 'open' LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00, 2.00, 0.00, 'confirmed'
     ) RETURNING id INTO v_b_id;
@@ -587,7 +587,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing WHERE status = 'open' LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00, 2.00, 0.00, 'confirmed'
     ) RETURNING id INTO v_b_id;
@@ -618,7 +618,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing WHERE status = 'open' LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         5.00, 2.00, 0.00, 'confirmed'
     ) RETURNING id INTO v_b_id;
@@ -658,7 +658,7 @@ BEGIN
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing WHERE status = 'open' LIMIT 1),
+        (SELECT id FROM capacity_listing WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test') ORDER BY id DESC LIMIT 1),
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         10.00, 5.00, 0.00, 'confirmed'
     ) RETURNING id, total_price INTO v_b_id, v_price;
@@ -684,7 +684,11 @@ DO $$
 DECLARE
     v_cbm NUMERIC(10, 2);
 BEGIN
-    SELECT available_cbm INTO v_cbm FROM capacity_listing LIMIT 1;
+    SELECT available_cbm INTO v_cbm
+    FROM capacity_listing
+    WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+    ORDER BY id DESC LIMIT 1;
+
     IF v_cbm = 40.00 THEN
         INSERT INTO test_results (test_id, test_desc, status, details)
         VALUES ('POSITIVE TEST 2', 'Available CBM decremented exactly', 'PASS', 'Remaining CBM: 40.00');
@@ -702,7 +706,11 @@ DO $$
 DECLARE
     v_wt NUMERIC(10, 2);
 BEGIN
-    SELECT available_weight INTO v_wt FROM capacity_listing LIMIT 1;
+    SELECT available_weight INTO v_wt
+    FROM capacity_listing
+    WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+    ORDER BY id DESC LIMIT 1;
+
     IF v_wt = 20.00 THEN
         INSERT INTO test_results (test_id, test_desc, status, details)
         VALUES ('POSITIVE TEST 3', 'Available weight decremented exactly', 'PASS', 'Remaining weight: 20.00');
@@ -722,7 +730,12 @@ DECLARE
 BEGIN
     SELECT count(*) INTO v_count
     FROM booking_status_history
-    WHERE booking_id = (SELECT max(id) FROM booking)
+    WHERE booking_id = (
+        SELECT b.id FROM booking b
+        JOIN capacity_listing l ON b.listing_id = l.id
+        WHERE l.provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+        ORDER BY b.id DESC LIMIT 1
+    )
       AND old_status IS NULL
       AND new_status = 'confirmed';
 
@@ -744,20 +757,27 @@ DECLARE
     v_status VARCHAR(20);
     v_cbm NUMERIC(10, 2);
     v_wt NUMERIC(10, 2);
+    v_test_listing_id BIGINT;
 BEGIN
+    SELECT id INTO v_test_listing_id
+    FROM capacity_listing
+    WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+    ORDER BY id DESC LIMIT 1;
+
     -- Book remaining 40 CBM & 20 Tonnes
     INSERT INTO booking (
         trader_id, listing_id, cargo_type_id,
         booked_cbm, booked_weight, total_price, status
     ) VALUES (
         (SELECT id FROM user_account WHERE email = 'global.trader@shipspace.test'),
-        (SELECT id FROM capacity_listing LIMIT 1),
+        v_test_listing_id,
         (SELECT id FROM cargo_type WHERE name = 'General Cargo'),
         40.00, 20.00, 0.00, 'confirmed'
     );
 
     SELECT status, available_cbm, available_weight INTO v_status, v_cbm, v_wt
-    FROM capacity_listing LIMIT 1;
+    FROM capacity_listing
+    WHERE id = v_test_listing_id;
 
     IF v_status = 'full' AND v_cbm = 0 AND v_wt = 0 THEN
         INSERT INTO test_results (test_id, test_desc, status, details)
@@ -778,14 +798,29 @@ DECLARE
     v_cbm NUMERIC(10, 2);
     v_wt NUMERIC(10, 2);
     v_status VARCHAR(20);
+    v_test_listing_id BIGINT;
+    v_first_booking_id BIGINT;
 BEGIN
+    SELECT id INTO v_test_listing_id
+    FROM capacity_listing
+    WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+    ORDER BY id DESC LIMIT 1;
+
+    -- First booking on this test listing was 10 CBM, 5 Tonnes
+    SELECT b.id INTO v_first_booking_id
+    FROM booking b
+    WHERE b.listing_id = v_test_listing_id
+      AND b.booked_cbm = 10.00 AND b.booked_weight = 5.00
+    ORDER BY b.id ASC LIMIT 1;
+
     -- Cancel first booking (10 CBM, 5 Tonnes)
     UPDATE booking
     SET status = 'cancelled'
-    WHERE id = (SELECT min(id) FROM booking);
+    WHERE id = v_first_booking_id;
 
     SELECT available_cbm, available_weight, status INTO v_cbm, v_wt, v_status
-    FROM capacity_listing LIMIT 1;
+    FROM capacity_listing
+    WHERE id = v_test_listing_id;
 
     -- Test 6 check
     IF v_cbm = 10.00 AND v_wt = 5.00 THEN
@@ -815,10 +850,23 @@ END $$;
 DO $$
 DECLARE
     v_count INT;
+    v_test_listing_id BIGINT;
+    v_first_booking_id BIGINT;
 BEGIN
+    SELECT id INTO v_test_listing_id
+    FROM capacity_listing
+    WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+    ORDER BY id DESC LIMIT 1;
+
+    SELECT b.id INTO v_first_booking_id
+    FROM booking b
+    WHERE b.listing_id = v_test_listing_id
+      AND b.booked_cbm = 10.00 AND b.booked_weight = 5.00
+    ORDER BY b.id ASC LIMIT 1;
+
     SELECT count(*) INTO v_count
     FROM booking_status_history
-    WHERE booking_id = (SELECT min(id) FROM booking)
+    WHERE booking_id = v_first_booking_id
       AND old_status = 'confirmed'
       AND new_status = 'cancelled';
 
@@ -838,15 +886,28 @@ END $$;
 DO $$
 DECLARE
     v_price NUMERIC(12, 2);
+    v_test_listing_id BIGINT;
+    v_first_booking_id BIGINT;
 BEGIN
+    SELECT id INTO v_test_listing_id
+    FROM capacity_listing
+    WHERE provider_id = (SELECT id FROM user_account WHERE email = 'apex.provider@shipspace.test')
+    ORDER BY id DESC LIMIT 1;
+
+    SELECT b.id INTO v_first_booking_id
+    FROM booking b
+    WHERE b.listing_id = v_test_listing_id
+      AND b.booked_cbm = 10.00 AND b.booked_weight = 5.00
+    ORDER BY b.id ASC LIMIT 1;
+
     -- Update rates on listing
     UPDATE capacity_listing
     SET price_per_cbm = 999.00, price_per_tonne = 999.00
-    WHERE id = (SELECT id FROM capacity_listing LIMIT 1);
+    WHERE id = v_test_listing_id;
 
     SELECT total_price INTO v_price
     FROM booking
-    WHERE id = (SELECT min(id) FROM booking);
+    WHERE id = v_first_booking_id;
 
     IF v_price = 1200.00 THEN
         INSERT INTO test_results (test_id, test_desc, status, details)
