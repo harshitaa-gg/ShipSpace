@@ -164,6 +164,8 @@ CREATE TRIGGER trg_validate_and_reserve_booking
 -- ============================================================================
 CREATE OR REPLACE FUNCTION fn_validate_booking_status_transition()
 RETURNS TRIGGER AS $$
+DECLARE
+    v_arrival_date DATE;
 BEGIN
     -- Prevent modification of core parameters on an existing booking
     IF NEW.listing_id <> OLD.listing_id THEN
@@ -184,9 +186,25 @@ BEGIN
 
     -- Validate status transitions
     IF NEW.status IS DISTINCT FROM OLD.status THEN
-        IF OLD.status = 'confirmed' AND NEW.status IN ('cancelled', 'completed') THEN
-            -- Valid transition
+        IF OLD.status = 'confirmed' AND NEW.status = 'cancelled' THEN
+            -- Valid transition: confirmed -> cancelled
             NULL;
+        ELSIF OLD.status = 'confirmed' AND NEW.status = 'completed' THEN
+            -- Valid transition: confirmed -> completed
+            -- Only allowed if the voyage has arrived (arrival_date < CURRENT_DATE)
+            SELECT arrival_date INTO v_arrival_date
+            FROM capacity_listing
+            WHERE id = OLD.listing_id;
+
+            IF NOT FOUND THEN
+                RAISE EXCEPTION 'Listing % associated with booking % does not exist',
+                    OLD.listing_id, OLD.id;
+            END IF;
+
+            IF v_arrival_date IS NULL OR v_arrival_date >= CURRENT_DATE THEN
+                RAISE EXCEPTION 'Booking % cannot be marked completed: voyage arrival date (%) must be past (current date: %)',
+                    OLD.id, COALESCE(v_arrival_date::text, 'NULL'), CURRENT_DATE;
+            END IF;
         ELSIF OLD.status = 'cancelled' THEN
             RAISE EXCEPTION 'Booking % has already been cancelled and cannot transition to %',
                 OLD.id, NEW.status;
