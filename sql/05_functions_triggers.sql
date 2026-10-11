@@ -116,9 +116,12 @@ BEGIN
     v_calculated_price := ROUND(GREATEST(v_charge_by_cbm, v_charge_by_weight, v_listing.minimum_charge), 2);
     NEW.total_price    := v_calculated_price;
 
-    -- Ensure initial booking status is confirmed
+    -- Ensure initial booking status is confirmed (reject invalid caller overrides)
     IF NEW.status IS NULL THEN
         NEW.status := 'confirmed';
+    ELSIF NEW.status <> 'confirmed' THEN
+        RAISE EXCEPTION 'Invalid initial booking status "%": new bookings must start in "confirmed" status',
+            NEW.status;
     END IF;
 
     -- 9 & 10. Atomically reduce available capacity on the listing
