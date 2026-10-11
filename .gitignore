@@ -20,3 +20,8 @@ npm-debug.log*
 phase6a_output.txt
 phase6c_benchmark_output.txt
 phase4_test_log.txt
+
+# Build output
+dist/
+frontend/dist/
+
