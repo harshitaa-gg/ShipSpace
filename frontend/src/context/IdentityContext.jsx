@@ -10,6 +10,7 @@ export function IdentityProvider({ children }) {
   const [cargoTypes, setCargoTypes] = useState([]);
   const [platformSummary, setPlatformSummary] = useState(null);
   const [dbHealth, setDbHealth] = useState(null);
+  const [dbConnected, setDbConnected] = useState(false);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
 
@@ -20,7 +21,7 @@ export function IdentityProvider({ children }) {
   const [activeRole, setActiveRole] = useState("trader");
   const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
 
-  const refreshReferenceData = useCallback(async () => {
+  const refreshCatalog = useCallback(async () => {
     setLoadingCatalog(true);
     setCatalogError(null);
     try {
@@ -40,29 +41,36 @@ export function IdentityProvider({ children }) {
       setCargoTypes(cargoRes.data || []);
       setUsers(fetchedUsers);
       setPlatformSummary(summaryRes.data || null);
-      if (healthRes) {
-        setDbHealth(healthRes);
-      }
+      setDbHealth(healthRes);
+      setDbConnected(Boolean(healthRes?.success || portsRes?.success));
 
       // Ensure selected IDs correspond to actual existing users in the database
-      const traders = fetchedUsers.filter((u) => u.role === "trader");
-      const providers = fetchedUsers.filter((u) => u.role === "provider");
-      const admins = fetchedUsers.filter((u) => u.role === "admin");
+      const tradersList = fetchedUsers.filter((u) => u.role === "trader");
+      const providersList = fetchedUsers.filter((u) => u.role === "provider");
+      const adminsList = fetchedUsers.filter((u) => u.role === "admin");
 
-      if (traders.length > 0 && !traders.some((t) => Number(t.id) === Number(selectedTraderId))) {
-        const preferred = traders.find((t) => Number(t.id) === 7) || traders[0];
-        setSelectedTraderId(Number(preferred.id));
+      if (
+        tradersList.length > 0 &&
+        !tradersList.some((t) => Number(t.user_id ?? t.id) === Number(selectedTraderId))
+      ) {
+        const preferred =
+          tradersList.find((t) => Number(t.user_id ?? t.id) === 7) || tradersList[0];
+        setSelectedTraderId(Number(preferred.user_id ?? preferred.id));
       }
       if (
-        providers.length > 0 &&
-        !providers.some((p) => Number(p.id) === Number(selectedProviderId))
+        providersList.length > 0 &&
+        !providersList.some((p) => Number(p.user_id ?? p.id) === Number(selectedProviderId))
       ) {
-        setSelectedProviderId(Number(providers[0].id));
+        setSelectedProviderId(Number(providersList[0].user_id ?? providersList[0].id));
       }
-      if (admins.length > 0 && !admins.some((a) => Number(a.id) === Number(selectedAdminId))) {
-        setSelectedAdminId(Number(admins[0].id));
+      if (
+        adminsList.length > 0 &&
+        !adminsList.some((a) => Number(a.user_id ?? a.id) === Number(selectedAdminId))
+      ) {
+        setSelectedAdminId(Number(adminsList[0].user_id ?? adminsList[0].id));
       }
     } catch (err) {
+      setDbConnected(false);
       setCatalogError(err.message || "Failed to load reference catalog from backend");
     } finally {
       setLoadingCatalog(false);
@@ -70,19 +78,19 @@ export function IdentityProvider({ children }) {
   }, [selectedTraderId, selectedProviderId, selectedAdminId]);
 
   useEffect(() => {
-    refreshReferenceData();
+    refreshCatalog();
   }, []);
 
   const traders = users.filter((u) => u.role === "trader");
   const providers = users.filter((u) => u.role === "provider");
   const admins = users.filter((u) => u.role === "admin");
 
-  const currentTrader =
-    traders.find((u) => Number(u.id) === Number(selectedTraderId)) || null;
-  const currentProvider =
-    providers.find((u) => Number(u.id) === Number(selectedProviderId)) || null;
-  const currentAdmin =
-    admins.find((u) => Number(u.id) === Number(selectedAdminId)) || null;
+  const activeTrader =
+    traders.find((u) => Number(u.user_id ?? u.id) === Number(selectedTraderId)) || null;
+  const activeProvider =
+    providers.find((u) => Number(u.user_id ?? u.id) === Number(selectedProviderId)) || null;
+  const activeAdmin =
+    admins.find((u) => Number(u.user_id ?? u.id) === Number(selectedAdminId)) || null;
 
   return (
     <IdentityContext.Provider
@@ -96,18 +104,23 @@ export function IdentityProvider({ children }) {
         cargoTypes,
         platformSummary,
         dbHealth,
+        dbConnected,
         loadingCatalog,
         catalogError,
-        refreshReferenceData,
+        refreshCatalog,
+        refreshReferenceData: refreshCatalog,
         selectedTraderId,
         setSelectedTraderId,
         selectedProviderId,
         setSelectedProviderId,
         selectedAdminId,
         setSelectedAdminId,
-        currentTrader,
-        currentProvider,
-        currentAdmin,
+        activeTrader,
+        activeProvider,
+        activeAdmin,
+        currentTrader: activeTrader,
+        currentProvider: activeProvider,
+        currentAdmin: activeAdmin,
         activeRole,
         setActiveRole,
         isIdentityModalOpen,
