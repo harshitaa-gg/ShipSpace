@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Building2,
   PlusCircle,
@@ -14,9 +15,57 @@ import {
   XCircle,
   Sparkles,
   X,
+  Search,
+  Clock,
+  Lock,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
+
+export function isListingCutoffValid(cutoffValue, nowDate = new Date()) {
+  if (!cutoffValue) return false;
+  const todayYmd = `${nowDate.getFullYear()}-${String(nowDate.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(nowDate.getDate()).padStart(2, '0')}`;
+
+  if (typeof cutoffValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(cutoffValue.trim())) {
+    return cutoffValue.trim() >= todayYmd;
+  }
+
+  const parsed = new Date(cutoffValue);
+  if (Number.isNaN(parsed.getTime())) return false;
+  const cutoffYmd = `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(parsed.getDate()).padStart(2, '0')}`;
+  return cutoffYmd >= todayYmd;
+}
+
+export function getListingStatusActions(item, nowDate = new Date()) {
+  const availCbmVal = parseFloat(item?.available_cbm ?? 0);
+  const availWeightVal = parseFloat(item?.available_weight ?? 0);
+  const cutoffValid = isListingCutoffValid(item?.cutoff_date, nowDate);
+  const status = item?.status;
+
+  const activeOrCompletedBookings =
+    Number(item?.active_booking_count || 0) +
+    Number(item?.confirmed_booking_count || 0) +
+    Number(item?.completed_booking_count || 0);
+
+  const canReopen =
+    status !== 'open' &&
+    status !== 'cancelled' &&
+    availCbmVal > 0 &&
+    availWeightVal > 0 &&
+    cutoffValid;
+
+  const canClose = status === 'open';
+
+  const canCancel = status !== 'cancelled' && activeOrCompletedBookings === 0;
+
+  return { canReopen, canClose, canCancel, availCbmVal, availWeightVal, cutoffValid };
+}
 
 export default function ProviderDashboardPage() {
   const {
@@ -31,12 +80,20 @@ export default function ProviderDashboardPage() {
 
   const [activeTab, setActiveTab] = useState('listings'); // 'listings' | 'create' | 'bookings'
   const [listings, setListings] = useState([]);
+  const [listingStatusFilter, setListingStatusFilter] = useState('');
+  const [listingSearchQuery, setListingSearchQuery] = useState('');
+  const [bookingStatusFilter, setBookingStatusFilter] = useState('');
   const [utilizationMeta, setUtilizationMeta] = useState(null);
   const [providerBookings, setProviderBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState(null);
   const [updatingListingId, setUpdatingListingId] = useState(null);
   const [cancellingBookingId, setCancellingBookingId] = useState(null);
+
+  // Cancellation modal states
+  const [cancelBookingTarget, setCancelBookingTarget] = useState(null);
+  const [cancelBookingReason, setCancelBookingReason] = useState('Voyage schedule adjustment');
+  const [cancelListingTarget, setCancelListingTarget] = useState(null);
 
   // Create Listing Form State (includes cutoff_date <= departure_date < arrival_date)
   const [routeId, setRouteId] = useState('');
@@ -158,27 +215,58 @@ export default function ProviderDashboardPage() {
         type: 'error',
         text: err.message || `Could not update Listing #${listingId} status.`,
       });
+      await loadProviderWorkspace();
     } finally {
       setUpdatingListingId(null);
     }
   };
 
-  const handleProviderCancelBooking = async (booking) => {
-    const confirmed = window.confirm(
-      `Cancel Booking #${booking.booking_id} (${booking.booked_cbm} CBM for ${
-        booking.trader_company || booking.trader_name
-      }) and restore capacity to Listing #${booking.listing_id}?`
-    );
-    if (!confirmed) return;
+  const isDateOrderValid = useMemo(() => {
+    if (!cutoffDate || !departureDate || !arrivalDate) return false;
+    return cutoffDate <= departureDate && departureDate < arrivalDate;
+  }, [cutoffDate, departureDate, arrivalDate]);
 
-    setCancellingBookingId(booking.booking_id);
+  const filteredListings = useMemo(() => {
+    let rows = listings;
+    if (listingStatusFilter) {
+      rows = rows.filter((l) => l.status === listingStatusFilter);
+    }
+    if (listingSearchQuery.trim()) {
+      const q = listingSearchQuery.toLowerCase().trim();
+      rows = rows.filter((l) => {
+        return (
+          String(l.listing_id).includes(q) ||
+          (l.route_code || '').toLowerCase().includes(q) ||
+          (l.origin_port_code || '').toLowerCase().includes(q) ||
+          (l.origin_port_name || '').toLowerCase().includes(q) ||
+          (l.destination_port_code || '').toLowerCase().includes(q) ||
+          (l.destination_port_name || '').toLowerCase().includes(q)
+        );
+      });
+    }
+    return rows;
+  }, [listings, listingStatusFilter, listingSearchQuery]);
+
+  const filteredProviderBookings = useMemo(() => {
+    if (!bookingStatusFilter) return providerBookings;
+    return providerBookings.filter((b) => b.booking_status === bookingStatusFilter);
+  }, [providerBookings, bookingStatusFilter]);
+
+  const executeProviderCancelBooking = async () => {
+    if (!cancelBookingTarget) return;
+    setCancellingBookingId(cancelBookingTarget.booking_id);
     setFeedback(null);
     try {
-      await api.cancelProviderBooking(booking.booking_id, Number(selectedProviderId));
+      await api.cancelProviderBooking(
+        cancelBookingTarget.booking_id,
+        Number(selectedProviderId),
+        cancelBookingReason
+      );
       setFeedback({
         type: 'success',
-        text: `Cancelled Booking #${booking.booking_id} via sp_cancel_booking and restored ${booking.booked_cbm} CBM to Listing #${booking.listing_id}.`,
+        text: `Cancelled Booking #${cancelBookingTarget.booking_id} via sp_cancel_booking and restored ${cancelBookingTarget.booked_cbm} CBM to Listing #${cancelBookingTarget.listing_id}.`,
       });
+      setCancelBookingTarget(null);
       await loadProviderWorkspace();
       refreshCatalog();
     } catch (err) {
@@ -186,8 +274,38 @@ export default function ProviderDashboardPage() {
         type: 'error',
         text: err.message || 'Could not cancel booking.',
       });
+      setCancelBookingTarget(null);
     } finally {
       setCancellingBookingId(null);
+    }
+  };
+
+  const executeCancelListing = async () => {
+    if (!cancelListingTarget) return;
+    const listingId = cancelListingTarget.listing_id;
+    setUpdatingListingId(listingId);
+    setFeedback(null);
+    try {
+      await api.updateProviderListingStatus(listingId, {
+        provider_id: Number(selectedProviderId),
+        status: 'cancelled',
+      });
+      setFeedback({
+        type: 'success',
+        text: `Cancelled Listing #${listingId}.`,
+      });
+      setCancelListingTarget(null);
+      await loadProviderWorkspace();
+      refreshCatalog();
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err.message || `Could not cancel Listing #${listingId}.`,
+      });
+      setCancelListingTarget(null);
+      await loadProviderWorkspace();
+    } finally {
+      setUpdatingListingId(null);
     }
   };
 
@@ -197,6 +315,13 @@ export default function ProviderDashboardPage() {
       <div className="workspace-hero-banner">
         <div className="workspace-banner-inner">
           <div>
+            <nav className="workspace-breadcrumb" aria-label="Breadcrumb">
+              <Link to="/" className="breadcrumb-link">ShipSpace</Link>
+              <span className="breadcrumb-sep">/</span>
+              <span className="breadcrumb-link">Provider Workspace</span>
+              <span className="breadcrumb-sep">/</span>
+              <span className="breadcrumb-current">Capacity Management</span>
+            </nav>
             <div className="section-eyebrow">
               <span className="eyebrow-bar" />
               <span className="eyebrow-text">LOGISTICS PROVIDER PORTAL</span>
@@ -345,26 +470,86 @@ export default function ProviderDashboardPage() {
 
         {/* TAB 1: PROVIDER CAPACITY LISTINGS */}
         {activeTab === 'listings' && (
-          <div className="listings-grid">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="table-filter-bar">
+              <div className="status-filter-pills">
+                {[
+                  { value: '', label: 'All Listings' },
+                  { value: 'open', label: 'Open' },
+                  { value: 'full', label: 'Full' },
+                  { value: 'closed', label: 'Closed' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ].map((st) => (
+                  <button
+                    key={st.value || 'all'}
+                    type="button"
+                    className={`filter-tab-btn ${listingStatusFilter === st.value ? 'active' : ''}`}
+                    onClick={() => setListingStatusFilter(st.value)}
+                  >
+                    {st.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="table-search-box">
+                <Search size={14} style={{ color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  className="table-search-input"
+                  placeholder="Filter by route, port or listing ID..."
+                  value={listingSearchQuery}
+                  onChange={(e) => setListingSearchQuery(e.target.value)}
+                />
+                {listingSearchQuery && (
+                  <button
+                    type="button"
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                    onClick={() => setListingSearchQuery('')}
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {loading ? (
               <div className="empty-state-card">Loading provider listings...</div>
-            ) : listings.length === 0 ? (
+            ) : filteredListings.length === 0 ? (
               <div className="empty-state-card">
                 <Ship size={38} className="text-orange" />
-                <h3>No Listings Published Yet</h3>
-                <p>Publish your first LCL container capacity listing for this provider.</p>
-                <button
-                  type="button"
-                  className="btn-orange-primary"
-                  onClick={() => setActiveTab('create')}
-                >
-                  <PlusCircle size={15} /> Publish Listing
-                </button>
+                <h3>No Listings Found</h3>
+                <p>
+                  {listingSearchQuery || listingStatusFilter
+                    ? 'No capacity listings matched your search or status filters.'
+                    : 'Publish your first LCL container capacity listing for this provider.'}
+                </p>
+                {listingSearchQuery || listingStatusFilter ? (
+                  <button
+                    type="button"
+                    className="btn-secondary-outline"
+                    onClick={() => {
+                      setListingSearchQuery('');
+                      setListingStatusFilter('');
+                    }}
+                  >
+                    Clear Filters
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-orange-primary"
+                    onClick={() => setActiveTab('create')}
+                  >
+                    <PlusCircle size={15} /> Publish Listing
+                  </button>
+                )}
               </div>
             ) : (
-              listings.map((item) => {
+              <div className="listings-grid">
+                {filteredListings.map((item) => {
                 const totalCbmVal = parseFloat(item.total_cbm || 1);
-                const availCbmVal = parseFloat(item.available_cbm || 0);
+                const { canReopen, canClose, canCancel, availCbmVal } =
+                  getListingStatusActions(item);
                 const bookedPct = Math.min(
                   100,
                   Math.max(0, Math.round(((totalCbmVal - availCbmVal) / totalCbmVal) * 100))
@@ -477,7 +662,7 @@ export default function ProviderDashboardPage() {
                       </div>
 
                       <div className="provider-status-controls">
-                        {item.status !== 'open' && availCbmVal > 0 && (
+                        {canReopen && (
                           <button
                             type="button"
                             className="btn-secondary-sm"
@@ -487,7 +672,7 @@ export default function ProviderDashboardPage() {
                             Reopen
                           </button>
                         )}
-                        {item.status === 'open' && (
+                        {canClose && (
                           <button
                             type="button"
                             className="btn-secondary-sm"
@@ -497,108 +682,132 @@ export default function ProviderDashboardPage() {
                             Close Listing
                           </button>
                         )}
-                        {item.status !== 'cancelled' &&
-                          Number(item.active_booking_count || 0) === 0 && (
-                            <button
-                              type="button"
-                              className="btn-danger-sm"
-                              disabled={updatingListingId === item.listing_id}
-                              onClick={() => handleStatusChange(item.listing_id, 'cancelled')}
-                            >
-                              Cancel
-                            </button>
-                          )}
+                        {canCancel && (
+                          <button
+                            type="button"
+                            className="btn-danger-sm"
+                            disabled={updatingListingId === item.listing_id}
+                            onClick={() => setCancelListingTarget(item)}
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </div>
                     </div>
                   </article>
                 );
-              })
+              })}
+              </div>
             )}
           </div>
         )}
 
         {/* TAB 2: TRADER BOOKINGS ON PROVIDER LISTINGS */}
         {activeTab === 'bookings' && (
-          <div className="bookings-stack">
-            {providerBookings.length === 0 ? (
-              <div className="empty-state-card">
-                <PackageCheck size={38} className="text-orange" />
-                <h3>No Bookings on Your Listings Yet</h3>
-                <p>When traders book space on your capacity listings, they will appear here.</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div className="table-filter-bar">
+              <div className="status-filter-pills">
+                {[
+                  { value: '', label: 'All Bookings' },
+                  { value: 'confirmed', label: 'Confirmed' },
+                  { value: 'completed', label: 'Completed' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ].map((st) => (
+                  <button
+                    key={st.value || 'all'}
+                    type="button"
+                    className={`filter-tab-btn ${bookingStatusFilter === st.value ? 'active' : ''}`}
+                    onClick={() => setBookingStatusFilter(st.value)}
+                  >
+                    {st.label}
+                  </button>
+                ))}
               </div>
-            ) : (
-              providerBookings.map((b) => (
-                <article key={b.booking_id} className="booking-row-card">
-                  <div className="booking-row-header">
-                    <div className="booking-id-group">
-                      <span className="booking-ref-badge">Booking #{b.booking_id}</span>
-                      <span className={`status-badge status-${b.booking_status}`}>
-                        {b.booking_status}
+            </div>
+
+            <div className="bookings-stack">
+              {filteredProviderBookings.length === 0 ? (
+                <div className="empty-state-card">
+                  <PackageCheck size={38} className="text-orange" />
+                  <h3>No Bookings Found</h3>
+                  <p>
+                    {bookingStatusFilter
+                      ? `No bookings with "${bookingStatusFilter}" status found on your listings.`
+                      : 'When traders book space on your capacity listings, they will appear here.'}
+                  </p>
+                </div>
+              ) : (
+                filteredProviderBookings.map((b) => (
+                  <article key={b.booking_id} className="booking-row-card">
+                    <div className="booking-row-header">
+                      <div className="booking-id-group">
+                        <span className="booking-ref-badge">Booking #{b.booking_id}</span>
+                        <span className={`status-badge status-${b.booking_status}`}>
+                          {b.booking_status}
+                        </span>
+                        <span className="booking-listing-ref">Listing #{b.listing_id}</span>
+                      </div>
+                      <span className="booking-timestamp">
+                        Booked {new Date(b.booking_date).toLocaleString()}
                       </span>
-                      <span className="booking-listing-ref">Listing #{b.listing_id}</span>
-                    </div>
-                    <span className="booking-timestamp">
-                      Booked {new Date(b.booking_date).toLocaleString()}
-                    </span>
-                  </div>
-
-                  <div className="booking-row-body">
-                    <div className="booking-route-col">
-                      <div className="booking-ports-inline">
-                        <span className="port-code-badge">{b.origin_port_code}</span>
-                        <strong>{b.origin_port_name}</strong>
-                        <ArrowRight size={15} className="text-orange" />
-                        <span className="port-code-badge">{b.destination_port_code}</span>
-                        <strong>{b.destination_port_name}</strong>
-                      </div>
-                      <div className="booking-provider-sub">
-                        <span>
-                          Trader: <strong>{b.trader_company || `Trader #${b.trader_id}`}</strong>
-                        </span>
-                        <span className="dot-sep">&bull;</span>
-                        <span>
-                          Cargo: <strong>{b.cargo_type_name}</strong>
-                        </span>
-                      </div>
                     </div>
 
-                    <div className="booking-quantities-col">
-                      <div className="qty-chip">
-                        <Box size={14} className="text-orange" />
-                        <span>{Number(b.booked_cbm).toFixed(2)} CBM</span>
-                      </div>
-                      <div className="qty-chip">
-                        <Scale size={14} className="text-orange" />
-                        <span>{Number(b.booked_weight).toFixed(2)} t</span>
-                      </div>
-                    </div>
-
-                    <div className="booking-actions-col">
-                      <div className="booking-price-display">
-                        <span className="metric-caption">Freight Revenue</span>
-                        <strong className="booking-price-amount">
-                          ${Number(b.total_price).toFixed(2)}
-                        </strong>
-                      </div>
-
-                      {b.booking_status === 'confirmed' && (
-                        <button
-                          type="button"
-                          className="btn-danger-sm"
-                          disabled={cancellingBookingId === b.booking_id}
-                          onClick={() => handleProviderCancelBooking(b)}
-                        >
-                          <XCircle size={14} />
+                    <div className="booking-row-body">
+                      <div className="booking-route-col">
+                        <div className="booking-ports-inline">
+                          <span className="port-code-badge">{b.origin_port_code}</span>
+                          <strong>{b.origin_port_name}</strong>
+                          <ArrowRight size={15} className="text-orange" />
+                          <span className="port-code-badge">{b.destination_port_code}</span>
+                          <strong>{b.destination_port_name}</strong>
+                        </div>
+                        <div className="booking-provider-sub">
                           <span>
-                            {cancellingBookingId === b.booking_id ? 'Cancelling...' : 'Cancel & Restore'}
+                            Trader: <strong>{b.trader_company || `Trader #${b.trader_id}`}</strong>
                           </span>
-                        </button>
-                      )}
+                          <span className="dot-sep">&bull;</span>
+                          <span>
+                            Cargo: <strong>{b.cargo_type_name}</strong>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="booking-quantities-col">
+                        <div className="qty-chip">
+                          <Box size={14} className="text-orange" />
+                          <span>{Number(b.booked_cbm).toFixed(2)} CBM</span>
+                        </div>
+                        <div className="qty-chip">
+                          <Scale size={14} className="text-orange" />
+                          <span>{Number(b.booked_weight).toFixed(2)} t</span>
+                        </div>
+                      </div>
+
+                      <div className="booking-actions-col">
+                        <div className="booking-price-display">
+                          <span className="metric-caption">Freight Revenue</span>
+                          <strong className="booking-price-amount">
+                            ${Number(b.total_price).toFixed(2)}
+                          </strong>
+                        </div>
+
+                        {b.booking_status === 'confirmed' && (
+                          <button
+                            type="button"
+                            className="btn-danger-sm"
+                            disabled={cancellingBookingId === b.booking_id}
+                            onClick={() => setCancelBookingTarget(b)}
+                          >
+                            <XCircle size={14} />
+                            <span>Cancel &amp; Restore</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))
-            )}
+                  </article>
+                ))
+              )}
+            </div>
           </div>
         )}
 
@@ -700,6 +909,12 @@ export default function ProviderDashboardPage() {
                   />
                 </div>
               </div>
+              {!isDateOrderValid && (
+                <div style={{ color: '#b91c1c', fontSize: '12px', marginTop: '4px' }}>
+                  <AlertTriangle size={13} style={{ display: 'inline', verticalAlign: 'middle', marginRight: '4px' }} />
+                  Cutoff date must be on or before departure date, and departure must be before arrival date.
+                </div>
+              )}
 
               <div className="form-row-2col">
                 <div className="form-group">
@@ -821,7 +1036,7 @@ export default function ProviderDashboardPage() {
                 <button
                   type="submit"
                   className="btn-orange-primary"
-                  disabled={creatingListing}
+                  disabled={creatingListing || !isDateOrderValid}
                 >
                   <PlusCircle size={16} />
                   <span>{creatingListing ? 'Publishing...' : 'Publish Capacity Listing'}</span>
@@ -831,6 +1046,168 @@ export default function ProviderDashboardPage() {
           </section>
         )}
       </div>
+
+      {/* Provider Cancel Booking Confirmation Modal */}
+      {cancelBookingTarget && (
+        <div className="modal-backdrop" onClick={() => !cancellingBookingId && setCancelBookingTarget(null)}>
+          <div
+            className="modal-card modal-card-sm confirm-dialog-danger"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">PROVIDER CANCEL ACTION</span>
+                <h3 className="modal-title">Cancel Reservation #{cancelBookingTarget.booking_id}?</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setCancelBookingTarget(null)}
+                disabled={Boolean(cancellingBookingId)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="confirm-warning-box">
+                <AlertTriangle size={18} className="confirm-warning-icon" />
+                <div>
+                  <strong>Cancel Trader Booking and Release Reserved Capacity</strong>
+                  <p style={{ marginTop: '3px', fontSize: '12px' }}>
+                    This action will cancel the trader's cargo reservation and immediately restore {cancelBookingTarget.booked_cbm} CBM and {cancelBookingTarget.booked_weight}t back to Listing #{cancelBookingTarget.listing_id}.
+                  </p>
+                </div>
+              </div>
+
+              <div className="confirm-details-card">
+                <div className="confirm-details-row">
+                  <span>Trader Shipper</span>
+                  <strong>{cancelBookingTarget.trader_company || `Trader #${cancelBookingTarget.trader_id}`}</strong>
+                </div>
+                <div className="confirm-details-row">
+                  <span>Route</span>
+                  <strong>{cancelBookingTarget.origin_port_code} &rarr; {cancelBookingTarget.destination_port_code}</strong>
+                </div>
+                <div className="confirm-details-row">
+                  <span>Capacity to Restore</span>
+                  <strong>{cancelBookingTarget.booked_cbm} CBM &middot; {cancelBookingTarget.booked_weight} tonnes</strong>
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label" htmlFor="cancel-booking-reason">
+                  Cancellation Reason / Log Note
+                </label>
+                <input
+                  id="cancel-booking-reason"
+                  type="text"
+                  className="form-input"
+                  value={cancelBookingReason}
+                  onChange={(e) => setCancelBookingReason(e.target.value)}
+                  placeholder="e.g. Voyage schedule adjustment, vessel mechanical delay..."
+                />
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                onClick={() => setCancelBookingTarget(null)}
+                disabled={Boolean(cancellingBookingId)}
+              >
+                Keep Booking
+              </button>
+              <button
+                type="button"
+                className="btn-sm-action btn-action-danger"
+                style={{ padding: '9px 18px', fontSize: '13px' }}
+                onClick={executeProviderCancelBooking}
+                disabled={Boolean(cancellingBookingId)}
+              >
+                {cancellingBookingId ? 'Releasing Capacity...' : 'Confirm Cancellation'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Provider Cancel Listing Confirmation Modal */}
+      {cancelListingTarget && (
+        <div className="modal-backdrop" onClick={() => !updatingListingId && setCancelListingTarget(null)}>
+          <div
+            className="modal-card modal-card-sm confirm-dialog-danger"
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">CONFIRM LISTING CANCELLATION</span>
+                <h3 className="modal-title">Cancel Listing #{cancelListingTarget.listing_id}?</h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setCancelListingTarget(null)}
+                disabled={Boolean(updatingListingId)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body">
+              <div className="confirm-warning-box">
+                <AlertTriangle size={18} className="confirm-warning-icon" />
+                <div>
+                  <strong>Cancel Entire Capacity Listing</strong>
+                  <p style={{ marginTop: '3px', fontSize: '12px' }}>
+                    Cancelling will mark this listing as <code>cancelled</code> and prevent all future trader bookings. Per business rules, listings with active or confirmed bookings cannot be cancelled.
+                  </p>
+                </div>
+              </div>
+
+              <div className="confirm-details-card">
+                <div className="confirm-details-row">
+                  <span>Route Corridor</span>
+                  <strong>{cancelListingTarget.origin_port_code} &rarr; {cancelListingTarget.destination_port_code}</strong>
+                </div>
+                <div className="confirm-details-row">
+                  <span>Available Capacity</span>
+                  <strong>{cancelListingTarget.available_cbm} CBM &middot; {cancelListingTarget.available_weight} tonnes</strong>
+                </div>
+                <div className="confirm-details-row">
+                  <span>Current Status</span>
+                  <strong>{cancelListingTarget.status}</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                onClick={() => setCancelListingTarget(null)}
+                disabled={Boolean(updatingListingId)}
+              >
+                Keep Listing Active
+              </button>
+              <button
+                type="button"
+                className="btn-sm-action btn-action-danger"
+                style={{ padding: '9px 18px', fontSize: '13px' }}
+                onClick={executeCancelListing}
+                disabled={Boolean(updatingListingId)}
+              >
+                {updatingListingId ? 'Cancelling Listing...' : 'Confirm Cancel Listing'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

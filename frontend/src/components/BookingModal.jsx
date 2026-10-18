@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import {
   X,
   Anchor,
@@ -266,9 +267,9 @@ export default function BookingModal({
               <button type="button" className="btn-secondary-outline" onClick={onClose}>
                 Continue Browsing
               </button>
-              <a href="/bookings" className="btn-orange-primary">
+              <Link to="/bookings" className="btn-orange-primary">
                 View in My Bookings <ArrowRight size={15} />
-              </a>
+              </Link>
             </div>
           </div>
         ) : (

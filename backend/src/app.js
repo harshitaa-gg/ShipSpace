@@ -9,6 +9,7 @@ const referenceRoutes = require("./routes/referenceRoutes");
 const providerRoutes = require("./routes/providerRoutes");
 const traderRoutes = require("./routes/traderRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const authRoutes = require("./routes/authRoutes");
 const providerController = require("./controllers/providerController");
 const traderController = require("./controllers/traderController");
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
@@ -68,6 +69,9 @@ app.use("/api/trader", traderRoutes);
 app.use("/api/traders", traderRoutes);
 
 app.use("/api/admin", adminRoutes);
+
+app.use("/api/auth", authRoutes);
+app.use("/api", authRoutes);
 
 // Top-level REST resource aliases for listings and bookings
 app.get("/api/listings", traderController.getAvailableListings);

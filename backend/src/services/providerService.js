@@ -239,7 +239,10 @@ async function updateListingStatus({ listingId, providerId, status }) {
 
     return pool.withTransaction(async (client) => {
         const listRes = await client.query(
-            `SELECT * FROM capacity_listing WHERE id = $1 FOR UPDATE`,
+            `SELECT *, (cutoff_date < CURRENT_DATE) AS is_past_cutoff
+             FROM capacity_listing
+             WHERE id = $1
+             FOR UPDATE`,
             [listingId]
         );
         if (listRes.rowCount === 0) {
@@ -255,18 +258,84 @@ async function updateListingStatus({ listingId, providerId, status }) {
             );
         }
 
+        if (listing.status === status) {
+            throw new AppError(
+                `Listing ID ${listingId} is already in status "${status}".`,
+                409,
+                "INVALID_STATUS_TRANSITION"
+            );
+        }
+
+        if (listing.status === "cancelled") {
+            throw new AppError(
+                `Cannot change status of Listing ID ${listingId} from "cancelled" to "${status}". Cancelled listings are terminal and cannot be reopened or modified.`,
+                409,
+                "INVALID_STATUS_TRANSITION"
+            );
+        }
+
+        if (status === "open") {
+            const availCbm = Number(listing.available_cbm);
+            const availWeight = Number(listing.available_weight);
+
+            if (availCbm <= 0) {
+                throw new AppError(
+                    `Cannot reopen Listing ID ${listingId}: available CBM is ${availCbm.toFixed(2)} (must be greater than zero).`,
+                    409,
+                    "INSUFFICIENT_CAPACITY_TO_REOPEN"
+                );
+            }
+
+            if (availWeight <= 0) {
+                throw new AppError(
+                    `Cannot reopen Listing ID ${listingId}: available weight is ${availWeight.toFixed(2)} tonnes (must be greater than zero).`,
+                    409,
+                    "INSUFFICIENT_CAPACITY_TO_REOPEN"
+                );
+            }
+
+            if (listing.is_past_cutoff) {
+                throw new AppError(
+                    `Cannot reopen Listing ID ${listingId}: the booking cutoff date has already passed.`,
+                    409,
+                    "CUTOFF_DATE_PASSED"
+                );
+            }
+        }
+
         if (status === "cancelled") {
-            const activeBookings = await client.query(
-                `SELECT COUNT(*)::int AS cnt
+            const bookingCountsRes = await client.query(
+                `SELECT
+                     COUNT(*) FILTER (WHERE status = 'confirmed')::int AS confirmed_cnt,
+                     COUNT(*) FILTER (WHERE status = 'completed')::int AS completed_cnt
                  FROM booking
-                 WHERE listing_id = $1 AND status = 'confirmed'`,
+                 WHERE listing_id = $1`,
                 [listingId]
             );
-            if (activeBookings.rows[0].cnt > 0) {
+            const { confirmed_cnt: confirmedCnt, completed_cnt: completedCnt } =
+                bookingCountsRes.rows[0];
+
+            if (confirmedCnt > 0 && completedCnt > 0) {
                 throw new AppError(
-                    `Cannot cancel Listing ID ${listingId} while it has ${activeBookings.rows[0].cnt} active confirmed booking(s). Cancel active bookings first.`,
+                    `Cannot cancel Listing ID ${listingId} while it has ${confirmedCnt} confirmed and ${completedCnt} completed booking(s).`,
+                    409,
+                    "ACTIVE_OR_COMPLETED_BOOKINGS_EXIST"
+                );
+            }
+
+            if (confirmedCnt > 0) {
+                throw new AppError(
+                    `Cannot cancel Listing ID ${listingId} while it has ${confirmedCnt} active confirmed booking(s). Cancel active bookings first.`,
                     409,
                     "ACTIVE_BOOKINGS_EXIST"
+                );
+            }
+
+            if (completedCnt > 0) {
+                throw new AppError(
+                    `Cannot cancel Listing ID ${listingId} because it has ${completedCnt} completed booking(s) that have already been fulfilled.`,
+                    409,
+                    "COMPLETED_BOOKINGS_EXIST"
                 );
             }
         }

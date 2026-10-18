@@ -31,6 +31,7 @@ export default function MyBookingsPage() {
 
   const [bookings, setBookings] = useState([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [feedbackBanner, setFeedbackBanner] = useState(null);
@@ -81,6 +82,23 @@ export default function MyBookingsPage() {
       totalValue: totalValue.toFixed(2),
     };
   }, [bookings]);
+
+  const filteredBookings = useMemo(() => {
+    if (!searchQuery.trim()) return bookings;
+    const q = searchQuery.toLowerCase().trim();
+    return bookings.filter((b) => {
+      return (
+        String(b.booking_id).includes(q) ||
+        String(b.listing_id).includes(q) ||
+        (b.origin_port_code || '').toLowerCase().includes(q) ||
+        (b.origin_port_name || '').toLowerCase().includes(q) ||
+        (b.destination_port_code || '').toLowerCase().includes(q) ||
+        (b.destination_port_name || '').toLowerCase().includes(q) ||
+        (b.provider_company || b.provider_name || '').toLowerCase().includes(q) ||
+        (b.cargo_type_name || '').toLowerCase().includes(q)
+      );
+    });
+  }, [bookings, searchQuery]);
 
   const handleInspectBooking = async (bookingId) => {
     setInspectLoading(true);
@@ -133,6 +151,13 @@ export default function MyBookingsPage() {
       <div className="workspace-hero-banner">
         <div className="workspace-banner-inner">
           <div>
+            <nav className="workspace-breadcrumb" aria-label="Breadcrumb">
+              <Link to="/" className="breadcrumb-link">ShipSpace</Link>
+              <span className="breadcrumb-sep">/</span>
+              <span className="breadcrumb-link">Trader Workspace</span>
+              <span className="breadcrumb-sep">/</span>
+              <span className="breadcrumb-current">My Bookings</span>
+            </nav>
             <div className="section-eyebrow">
               <span className="eyebrow-bar" />
               <span className="eyebrow-text">TRADER SHIPMENT MANAGEMENT</span>
@@ -223,7 +248,7 @@ export default function MyBookingsPage() {
           </div>
         )}
 
-        {/* Filter Bar */}
+        {/* Filter & Search Bar */}
         <div className="section-toolbar-card">
           <div className="status-filter-pills">
             {[
@@ -241,6 +266,26 @@ export default function MyBookingsPage() {
                 {tab.label}
               </button>
             ))}
+          </div>
+
+          <div className="table-search-box">
+            <Search size={14} style={{ color: '#94a3b8' }} />
+            <input
+              type="text"
+              className="table-search-input"
+              placeholder="Search by route, port, provider..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}
+                onClick={() => setSearchQuery('')}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
 
           <div className="toolbar-right-actions">
@@ -278,21 +323,28 @@ export default function MyBookingsPage() {
               </div>
             ))}
           </div>
-        ) : bookings.length === 0 ? (
+        ) : filteredBookings.length === 0 ? (
           <div className="empty-state-card">
             <FileText size={38} className="text-orange" />
             <h3>No Bookings Found</h3>
             <p>
-              No shipments matched the selected filter for{' '}
-              <strong>{activeTrader?.company_name || `Trader #${selectedTraderId}`}</strong>.
+              {searchQuery
+                ? `No shipments matching "${searchQuery}" for ${activeTrader?.company_name || `Trader #${selectedTraderId}`}.`
+                : `No shipments found under "${statusFilter || 'all'}" status for ${activeTrader?.company_name || `Trader #${selectedTraderId}`}.`}
             </p>
-            <Link to="/search" className="btn-orange-primary">
-              Search Available LCL Capacity <ArrowRight size={15} />
-            </Link>
+            {searchQuery ? (
+              <button type="button" className="btn-secondary-outline" onClick={() => setSearchQuery('')}>
+                Clear Search Filter
+              </button>
+            ) : (
+              <Link to="/search" className="btn-orange-primary">
+                Search Available LCL Capacity <ArrowRight size={15} />
+              </Link>
+            )}
           </div>
         ) : (
           <div className="bookings-stack">
-            {bookings.map((b) => {
+            {filteredBookings.map((b) => {
               const canCancel =
                 b.booking_status === 'confirmed' || b.booking_status === 'pending';
 
@@ -403,14 +455,14 @@ export default function MyBookingsPage() {
       {cancelTarget && (
         <div className="modal-backdrop" onClick={() => !cancelling && setCancelTarget(null)}>
           <div
-            className="modal-card modal-card-sm"
+            className="modal-card modal-card-sm confirm-dialog-danger"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
           >
             <div className="modal-header">
               <div>
-                <span className="modal-eyebrow">DATABASE STORED PROCEDURE</span>
+                <span className="modal-eyebrow">CONFIRM CANCELLATION</span>
                 <h3 className="modal-title">Cancel Booking #{cancelTarget.booking_id}?</h3>
               </div>
               <button
@@ -424,25 +476,34 @@ export default function MyBookingsPage() {
             </div>
 
             <div className="modal-body">
-              <p className="modal-helper-text">
-                Confirming cancellation executes <code>shipspace.sp_cancel_booking</code> in
-                PostgreSQL, which atomically:
+              <div className="confirm-warning-box">
+                <AlertTriangle size={18} className="confirm-warning-icon" />
+                <div>
+                  <strong>Are you sure you want to cancel this reservation?</strong>
+                  <p style={{ marginTop: '3px', fontSize: '12px' }}>
+                    This action will immediately release reserved freight capacity back to the provider's active listing.
+                  </p>
+                </div>
+              </div>
+
+              <div className="confirm-details-card">
+                <div className="confirm-details-row">
+                  <span>Shipment Route</span>
+                  <strong>{cancelTarget.origin_port_code} &rarr; {cancelTarget.destination_port_code}</strong>
+                </div>
+                <div className="confirm-details-row">
+                  <span>Capacity Released</span>
+                  <strong>{cancelTarget.booked_cbm} CBM &middot; {cancelTarget.booked_weight} tonnes</strong>
+                </div>
+                <div className="confirm-details-row">
+                  <span>Freight Total</span>
+                  <strong>${Number(cancelTarget.total_price || 0).toFixed(2)}</strong>
+                </div>
+              </div>
+
+              <p className="modal-helper-text" style={{ fontSize: '12px' }}>
+                Executed via <code>shipspace.sp_cancel_booking</code> in PostgreSQL. Capacity is returned to Listing #{cancelTarget.listing_id} and an audit event is appended to <code>booking_status_history</code>.
               </p>
-              <ul className="modal-bullet-list">
-                <li>
-                  Updates Booking <strong>#{cancelTarget.booking_id}</strong> status to{' '}
-                  <code>cancelled</code>
-                </li>
-                <li>
-                  Restores <strong>{cancelTarget.booked_cbm} CBM</strong> and{' '}
-                  <strong>{cancelTarget.booked_weight} tonnes</strong> back to Listing{' '}
-                  <strong>#{cancelTarget.listing_id}</strong>
-                </li>
-                <li>
-                  Appends an immutable row in <code>booking_status_history</code> via trigger{' '}
-                  <code>trg_booking_status_audit</code>
-                </li>
-              </ul>
             </div>
 
             <div className="modal-footer">
@@ -456,11 +517,12 @@ export default function MyBookingsPage() {
               </button>
               <button
                 type="button"
-                className="btn-danger-solid"
+                className="btn-sm-action btn-action-danger"
+                style={{ padding: '9px 18px', fontSize: '13px' }}
                 onClick={handleConfirmCancel}
                 disabled={cancelling}
               >
-                {cancelling ? 'Executing sp_cancel_booking...' : 'Confirm Cancellation'}
+                {cancelling ? 'Releasing Capacity...' : 'Confirm Cancellation'}
               </button>
             </div>
           </div>

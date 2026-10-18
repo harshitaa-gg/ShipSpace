@@ -147,6 +147,15 @@ function normalizeBooking(b) {
 }
 
 export const api = {
+  // Authentication & Registration
+  register: async (body) => {
+    const res = await request('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+    return { ...res, data: normalizeUser(res.data) };
+  },
+
   // Health & Reference Data
   getHealth: () => request('/health'),
   getDbHealth: () => request('/health/db'),
@@ -304,6 +313,10 @@ export const api = {
   getAdminUsers: async (params) => {
     const res = await request(`/admin/users${buildQuery(params)}`);
     return { ...res, data: (res.data || []).map(normalizeUser) };
+  },
+  getAdminBookings: async (params) => {
+    const res = await request(`/admin/bookings${buildQuery(params)}`);
+    return { ...res, data: (res.data || []).map(normalizeBooking) };
   },
   getAdminBookingHistory: (params) =>
     request(`/admin/bookings/history${buildQuery(params)}`),

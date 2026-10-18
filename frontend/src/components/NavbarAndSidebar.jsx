@@ -82,6 +82,7 @@ const SIDEBAR_ITEMS = [
 
 export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) {
   const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const {
     traders,
     providers,
@@ -102,6 +103,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
   const navigate = useNavigate();
 
   const scrollToSection = (sectionId) => {
+    setMobileNavOpen(false);
     if (location.pathname !== '/') {
       navigate(`/#${sectionId}`);
       setTimeout(() => {
@@ -206,7 +208,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
             <span className="topbar-brand-tagline">Space for every shipment</span>
           </div>
 
-          {/* Center-Right Navigation Links & Controls */}
+          {/* Center Navigation Links & Controls */}
           <div className="topbar-actions-group">
             <nav className="topbar-links" aria-label="Top Navigation">
               <NavLink
@@ -220,7 +222,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
                 to="/search"
                 className={({ isActive }) => `topbar-link ${isActive ? 'active' : ''}`}
               >
-                Find Cargo Space
+                Find Capacity
               </NavLink>
               <button
                 type="button"
@@ -232,48 +234,132 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
               <button
                 type="button"
                 className="topbar-link topbar-link-btn"
-                onClick={() => scrollToSection('about-shipspace')}
+                onClick={() => scrollToSection('for-providers')}
               >
-                About
+                For Providers
+              </button>
+              <button
+                type="button"
+                className="topbar-link topbar-link-btn"
+                onClick={() => scrollToSection('for-traders')}
+              >
+                For Traders
+              </button>
+              <button
+                type="button"
+                className="topbar-link topbar-link-btn"
+                onClick={() => scrollToSection('marketplace-preview')}
+              >
+                Marketplace
               </button>
             </nav>
 
             <div className="topbar-right-controls">
-              {/* Language Selector */}
-              <button
-                type="button"
-                className="topbar-lang-btn"
-                onClick={() => setIdentityModalOpen(true)}
-                title="Active Demo Session & Language"
-              >
-                <Globe size={15} className="topbar-globe-icon" />
-                <span>EN</span>
-                <ChevronDown size={13} />
-              </button>
-
-              {/* Active Demo Identity Pill */}
+              {/* Active Demo Identity Switcher Pill */}
               <button
                 type="button"
                 className="topbar-identity-pill"
                 onClick={() => setIdentityModalOpen(true)}
-                title="Switch active Demo Trader / Provider identity"
+                title="Switch active Demo Session (Trader/Provider/Admin)"
               >
                 <UserCheck size={14} className="identity-pill-icon" />
                 <span className="identity-pill-role">{badge.role}:</span>
                 <span className="identity-pill-name">#{badge.id} {badge.name}</span>
               </button>
 
-              {/* Primary Orange CTA Button matching Screenshot ("Log in") */}
+              {/* Sign In Navigation Link */}
+              <Link to="/login" className="topbar-signin-btn">
+                Sign In
+              </Link>
+
+              {/* Primary Get Started CTA Button */}
+              <Link to="/register" className="topbar-getstarted-btn">
+                Get Started
+              </Link>
+
+              {/* Mobile Drawer Hamburger */}
               <button
                 type="button"
-                className="topbar-login-btn"
-                onClick={() => setIdentityModalOpen(true)}
+                className="topbar-mobile-toggle"
+                onClick={() => setMobileNavOpen((prev) => !prev)}
+                aria-label="Toggle navigation menu"
+                aria-expanded={mobileNavOpen}
               >
-                Log in
+                {mobileNavOpen ? <X size={20} /> : <Menu size={20} />}
               </button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Navigation Dropdown Drawer */}
+        {mobileNavOpen && (
+          <div className="topbar-mobile-drawer">
+            <nav className="mobile-drawer-nav">
+              <Link to="/" className="mobile-drawer-link" onClick={() => setMobileNavOpen(false)}>
+                Home
+              </Link>
+              <Link to="/search" className="mobile-drawer-link" onClick={() => setMobileNavOpen(false)}>
+                Find Capacity
+              </Link>
+              <button
+                type="button"
+                className="mobile-drawer-link mobile-drawer-btn"
+                onClick={() => scrollToSection('how-it-works')}
+              >
+                How It Works
+              </button>
+              <button
+                type="button"
+                className="mobile-drawer-link mobile-drawer-btn"
+                onClick={() => scrollToSection('for-providers')}
+              >
+                For Providers
+              </button>
+              <button
+                type="button"
+                className="mobile-drawer-link mobile-drawer-btn"
+                onClick={() => scrollToSection('for-traders')}
+              >
+                For Traders
+              </button>
+              <button
+                type="button"
+                className="mobile-drawer-link mobile-drawer-btn"
+                onClick={() => scrollToSection('marketplace-preview')}
+              >
+                Marketplace Preview
+              </button>
+
+              <div className="mobile-drawer-actions">
+                <Link
+                  to="/login"
+                  className="btn-hero-outline full-width"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  <span>Sign In</span>
+                </Link>
+                <Link
+                  to="/register"
+                  className="btn-hero-primary full-width"
+                  onClick={() => setMobileNavOpen(false)}
+                >
+                  <span>Get Started</span>
+                </Link>
+                <button
+                  type="button"
+                  className="btn-secondary-sm full-width"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setIdentityModalOpen(true);
+                  }}
+                >
+                  <UserCheck size={14} />
+                  <span>Demo Switcher ({badge.role} #{badge.id})</span>
+                </button>
+              </div>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Demo Role & Identity Switcher Modal */}

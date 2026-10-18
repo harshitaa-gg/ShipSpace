@@ -8,6 +8,9 @@ import SearchListingsPage from './pages/SearchListingsPage';
 import MyBookingsPage from './pages/MyBookingsPage';
 import ProviderDashboardPage from './pages/ProviderDashboardPage';
 import AdminOverviewPage from './pages/AdminOverviewPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
 
 export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -29,6 +32,9 @@ export default function App() {
                 <Route path="/bookings" element={<MyBookingsPage />} />
                 <Route path="/provider" element={<ProviderDashboardPage />} />
                 <Route path="/admin" element={<AdminOverviewPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/forgot-password" element={<ForgotPasswordPage />} />
               </Routes>
             </main>
             <Footer />

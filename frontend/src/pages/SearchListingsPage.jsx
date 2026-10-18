@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import {
   Search,
   MapPin,
@@ -15,6 +15,8 @@ import {
   Ship,
   CheckCircle2,
   Package,
+  FileText,
+  Clock,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
@@ -276,6 +278,13 @@ export default function SearchListingsPage() {
       <div className="workspace-hero-banner">
         <div className="workspace-banner-inner">
           <div>
+            <nav className="workspace-breadcrumb" aria-label="Breadcrumb">
+              <Link to="/" className="breadcrumb-link">ShipSpace</Link>
+              <span className="breadcrumb-sep">/</span>
+              <span className="breadcrumb-link">Trader Workspace</span>
+              <span className="breadcrumb-sep">/</span>
+              <span className="breadcrumb-current">Capacity Discovery</span>
+            </nav>
             <div className="section-eyebrow">
               <span className="eyebrow-bar" />
               <span className="eyebrow-text">TRADER CAPACITY MARKETPLACE</span>
@@ -293,6 +302,22 @@ export default function SearchListingsPage() {
               #{activeTrader?.user_id || 7} — {activeTrader?.company_name || activeTrader?.name || 'Aarav Textiles Export House'}
             </strong>
             <span className="context-card-sub">{activeTrader?.email || 'aarav@aaravtextiles.in'}</span>
+            <Link
+              to="/bookings"
+              className="context-card-sub"
+              style={{
+                marginTop: '6px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
+                color: '#fdba74',
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: '11.5px',
+              }}
+            >
+              <FileText size={12} /> View My Bookings &rarr;
+            </Link>
           </div>
         </div>
       </div>

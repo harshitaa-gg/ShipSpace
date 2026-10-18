@@ -14,12 +14,62 @@ export function IdentityProvider({ children }) {
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
 
-  // Selected Demo Identities (populated from real database accounts)
-  const [selectedTraderId, setSelectedTraderId] = useState(7); // Default known seeded trader ID 7 (Aarav Textiles Export House)
-  const [selectedProviderId, setSelectedProviderId] = useState(1); // Default known seeded provider ID 1 (Maersk Logistics India)
-  const [selectedAdminId, setSelectedAdminId] = useState(27); // Default known seeded admin ID 27
-  const [activeRole, setActiveRole] = useState("trader");
+  // Selected Demo Identities (populated from real database accounts and synced to localStorage)
+  const [selectedTraderId, setSelectedTraderIdState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('shipspace_trader_id');
+      return saved ? Number(saved) : 7;
+    } catch {
+      return 7;
+    }
+  });
+  const [selectedProviderId, setSelectedProviderIdState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('shipspace_provider_id');
+      return saved ? Number(saved) : 1;
+    } catch {
+      return 1;
+    }
+  });
+  const [selectedAdminId, setSelectedAdminIdState] = useState(() => {
+    try {
+      const saved = localStorage.getItem('shipspace_admin_id');
+      return saved ? Number(saved) : 27;
+    } catch {
+      return 27;
+    }
+  });
+  const [activeRole, setActiveRoleState] = useState(() => {
+    try {
+      return localStorage.getItem('shipspace_active_role') || 'trader';
+    } catch {
+      return 'trader';
+    }
+  });
   const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
+
+  const setSelectedTraderId = useCallback((id) => {
+    const num = Number(id);
+    setSelectedTraderIdState(num);
+    try { localStorage.setItem('shipspace_trader_id', String(num)); } catch {}
+  }, []);
+
+  const setSelectedProviderId = useCallback((id) => {
+    const num = Number(id);
+    setSelectedProviderIdState(num);
+    try { localStorage.setItem('shipspace_provider_id', String(num)); } catch {}
+  }, []);
+
+  const setSelectedAdminId = useCallback((id) => {
+    const num = Number(id);
+    setSelectedAdminIdState(num);
+    try { localStorage.setItem('shipspace_admin_id', String(num)); } catch {}
+  }, []);
+
+  const setActiveRole = useCallback((role) => {
+    setActiveRoleState(role);
+    try { localStorage.setItem('shipspace_active_role', role); } catch {}
+  }, []);
 
   const refreshCatalog = useCallback(async () => {
     setLoadingCatalog(true);
