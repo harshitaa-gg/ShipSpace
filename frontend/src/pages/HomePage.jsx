@@ -530,11 +530,11 @@ export default function HomePage() {
                 <h3 className="how-step-title">Lock Space &amp; Track Status</h3>
               </div>
               <p className="how-step-desc">
-                Execute row-locked reservations instantly via <code>sp_create_booking</code>. Track booking
-                status lifecycle and cancel with automatic capacity restoration.
+                Reserve verified space instantly with real-time capacity checks. Track shipment milestones
+                and cancel eligible bookings with automatic capacity return.
               </p>
               <div className="how-step-footnote">
-                <span>Complete audit trail logging</span>
+                <span>Complete shipment visibility</span>
               </div>
             </div>
           </div>
@@ -634,8 +634,8 @@ export default function HomePage() {
                   eligible reservations with instant capacity return to the market.
                 </p>
                 <ul className="feature-card-points">
-                  <li>Full booking status audit trail transparency</li>
-                  <li>Automated capacity restoration via <code>sp_cancel_booking</code></li>
+                  <li>Full booking status timeline and milestone tracking</li>
+                  <li>Automated capacity restoration on eligible cancellations</li>
                 </ul>
               </div>
             </div>
@@ -666,7 +666,7 @@ export default function HomePage() {
                 <h3 className="feature-card-title">Fleet &amp; Route Utilization Analytics</h3>
                 <p className="feature-card-desc">
                   Monitor aggregate fleet load percentages, booked CBM totals, and confirmed freight revenue
-                  in real time via <code>v_provider_listing_utilization</code>.
+                  in real time through comprehensive load factor analytics.
                 </p>
                 <ul className="feature-card-points">
                   <li>Eliminate manual booking spreadsheet reconciliation</li>
@@ -817,14 +817,14 @@ export default function HomePage() {
           <div className="section-header-centered">
             <div className="section-eyebrow">
               <span className="eyebrow-bar" />
-              <span className="eyebrow-text">DETERMINISTIC FREIGHT GUARANTEES</span>
+              <span className="eyebrow-text">TRANSPARENT FREIGHT GUARANTEES</span>
             </div>
             <h2 id="trust-heading" className="section-title">
-              Engineered for Freight Dependability, Not Assumptions
+              Built for Commercial Freight Dependability
             </h2>
             <p className="section-subtitle">
-              ShipSpace eliminates the opacity and guesswork of legacy freight brokering with concrete
-              database guarantees and transparent marketplace mechanics.
+              ShipSpace eliminates the opacity and guesswork of traditional freight booking with verified
+              allocations, standard tariff rules, and complete operational transparency.
             </p>
           </div>
 
@@ -833,11 +833,10 @@ export default function HomePage() {
               <div className="trust-pillar-icon">
                 <Lock size={22} />
               </div>
-              <h3 className="trust-pillar-title">Atomic Row-Level Locking</h3>
+              <h3 className="trust-pillar-title">Guaranteed Space Allocation</h3>
               <p className="trust-pillar-desc">
-                Container space deductions run through explicit PostgreSQL <code>SELECT ... FOR UPDATE</code>{' '}
-                row locks inside <code>sp_create_booking</code>, mathematically eliminating the possibility
-                of concurrent double-booking.
+                Container space deductions verify live available volume and weight before confirmation,
+                eliminating waitlists, phantom bookings, and double-allocation risk.
               </p>
             </div>
 
@@ -848,7 +847,7 @@ export default function HomePage() {
               <h3 className="trust-pillar-title">UN/LOCODE Standardized Ports</h3>
               <p className="trust-pillar-desc">
                 Every trade corridor links recognized 5-letter United Nations Code for Trade and Transport
-                Locations (UN/LOCODE), preventing ambiguous terminal and customs routing errors.
+                Locations (UN/LOCODE), preventing ambiguous terminal routing and customs errors.
               </p>
             </div>
 
@@ -858,8 +857,8 @@ export default function HomePage() {
               </div>
               <h3 className="trust-pillar-title">Weight or Measure (W/M) Integrity</h3>
               <p className="trust-pillar-desc">
-                Pricing is dynamically calculated by <code>fn_calculate_booking_price</code> following the
-                maritime standard ratio (1 CBM = 1,000 kg), providing complete predictability before booking.
+                Pricing is calculated transparently following standard international maritime ratios
+                (1 CBM = 1,000 kg), providing complete cost certainty before booking.
               </p>
             </div>
 
@@ -867,10 +866,10 @@ export default function HomePage() {
               <div className="trust-pillar-icon">
                 <FileCheck size={22} />
               </div>
-              <h3 className="trust-pillar-title">Immutable Audit Trail</h3>
+              <h3 className="trust-pillar-title">Complete Status Audit Trail</h3>
               <p className="trust-pillar-desc">
-                All booking status transitions (pending, confirmed, cancelled, completed) trigger automatic
-                entries in <code>booking_status_history</code>, providing a tamper-proof record of every event.
+                All booking transitions—from initial confirmation to voyage arrival or cancellation—are
+                recorded with timestamps and event notes for full supply chain visibility.
               </p>
             </div>
           </div>

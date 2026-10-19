@@ -264,7 +264,7 @@ export default function ProviderDashboardPage() {
       );
       setFeedback({
         type: 'success',
-        text: `Cancelled Booking #${cancelBookingTarget.booking_id} via sp_cancel_booking and restored ${cancelBookingTarget.booked_cbm} CBM to Listing #${cancelBookingTarget.listing_id}.`,
+        text: `Cancelled Booking #${cancelBookingTarget.booking_id} and restored ${cancelBookingTarget.booked_cbm} CBM to Listing #${cancelBookingTarget.listing_id}.`,
       });
       setCancelBookingTarget(null);
       await loadProviderWorkspace();
@@ -328,8 +328,7 @@ export default function ProviderDashboardPage() {
             </div>
             <h1 className="workspace-title">Provider Capacity &amp; Booking Operations</h1>
             <p className="workspace-subtitle">
-              Publish LCL container space, monitor CBM utilization from{' '}
-              <code>v_provider_listing_utilization</code>, and manage trader reservations.
+              Publish LCL container space, monitor fleet utilization, and manage trader bookings.
             </p>
           </div>
 
@@ -819,8 +818,7 @@ export default function ProviderDashboardPage() {
                 <span className="modal-eyebrow">NEW CONTAINER SPACE OFFERING</span>
                 <h3>Publish LCL Capacity Listing</h3>
                 <p>
-                  Creates a new row in <code>shipspace.capacity_listing</code> and links allowed
-                  cargo classifications in <code>listing_cargo</code>.
+                  Set route corridor, schedule dates, available volume/weight, and tariff rates for this voyage.
                 </p>
               </div>
               <button

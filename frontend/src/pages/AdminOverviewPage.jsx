@@ -259,16 +259,14 @@ export default function AdminOverviewPage() {
             </div>
             <h1 className="workspace-title">ShipSpace Executive Administration</h1>
             <p className="workspace-subtitle">
-              Enterprise management powered by PostgreSQL views{' '}
-              <code>v_admin_platform_summary</code>, <code>v_admin_capacity_overview</code>,{' '}
-              <code>v_provider_listing_utilization</code>, and stored procedures.
+              Platform overview, route capacity monitoring, provider fleet utilization, and user management.
             </p>
           </div>
 
           <div className="workspace-context-card">
-            <span className="context-card-label">DATABASE ARCHITECTURE</span>
-            <strong className="context-card-name">shipspace (PostgreSQL)</strong>
-            <span className="context-card-sub">14 Schema Tables &middot; 5 Views &middot; 5 Triggers</span>
+            <span className="context-card-label">PLATFORM DATA</span>
+            <strong className="context-card-name">Operational Summary</strong>
+            <span className="context-card-sub">All Routes &amp; Listings Active</span>
           </div>
         </div>
       </div>
@@ -424,7 +422,7 @@ export default function AdminOverviewPage() {
               <div>
                 <h3>Route-Level Capacity &amp; Utilization Overview</h3>
                 <p>
-                  Live aggregation from PostgreSQL view <code>shipspace.v_admin_capacity_overview</code>
+                  Aggregated capacity across all active maritime corridors
                 </p>
               </div>
 
@@ -528,7 +526,7 @@ export default function AdminOverviewPage() {
               <div>
                 <h3>Provider Listing Utilization &amp; Revenue Report</h3>
                 <p>
-                  Live query from PostgreSQL view <code>shipspace.v_provider_listing_utilization</code>
+                  Listing-level breakdown of capacity commitment and revenue
                 </p>
               </div>
 
@@ -833,9 +831,9 @@ export default function AdminOverviewPage() {
           <section className="data-table-card">
             <div className="table-card-header">
               <div>
-                <h3>PostgreSQL Booking Status Audit Log</h3>
+                <h3>Booking Status Audit Trail</h3>
                 <p>
-                  Populated automatically by database trigger <code>trg_record_booking_status_history</code>
+                  System log tracking booking status transitions and operational actions
                 </p>
               </div>
 
@@ -920,7 +918,7 @@ export default function AdminOverviewPage() {
           <div className="admin-forms-3col">
             {/* Create Port */}
             <form className="form-panel-card" onSubmit={handleCreatePort}>
-              <span className="modal-eyebrow">POST /api/admin/ports</span>
+              <span className="modal-eyebrow">SEAPORT DIRECTORY</span>
               <h3>Register New Seaport</h3>
               <div className="form-group">
                 <label className="form-label">Port Name</label>
@@ -963,7 +961,7 @@ export default function AdminOverviewPage() {
 
             {/* Create Route */}
             <form className="form-panel-card" onSubmit={handleCreateRoute}>
-              <span className="modal-eyebrow">POST /api/admin/routes</span>
+              <span className="modal-eyebrow">SHIPPING LANES</span>
               <h3>Create Maritime Route</h3>
               <div className="form-group">
                 <label className="form-label">Origin Port</label>
@@ -1016,7 +1014,7 @@ export default function AdminOverviewPage() {
 
             {/* Create Cargo Type */}
             <form className="form-panel-card" onSubmit={handleCreateCargoType}>
-              <span className="modal-eyebrow">POST /api/admin/cargo-types</span>
+              <span className="modal-eyebrow">CARGO CLASSIFICATIONS</span>
               <h3>Add Cargo Classification</h3>
               <div className="form-group">
                 <label className="form-label">Classification Name</label>

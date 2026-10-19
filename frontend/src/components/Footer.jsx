@@ -86,7 +86,7 @@ export default function Footer() {
               <Link to="/forgot-password">Reset Password</Link>
             </li>
             <li>
-              <span className="footer-text-muted">Enterprise Access (Part 2)</span>
+              <span className="footer-text-muted">Enterprise Access &amp; SSO</span>
             </li>
             <li>
               <span className="footer-text-muted">Role-Based Access Control (RBAC)</span>
@@ -138,7 +138,7 @@ export default function Footer() {
           <span className="footer-dot-sep">·</span>
           <span>UN/LOCODE Standardized Ports</span>
           <span className="footer-dot-sep">·</span>
-          <span>PostgreSQL Stored Procedures &amp; Triggers</span>
+          <span>Deterministic Capacity Allocation</span>
         </div>
       </div>
     </footer>

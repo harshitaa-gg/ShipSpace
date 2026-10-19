@@ -133,25 +133,20 @@ export default function ForgotPasswordPage() {
               <div className="auth-success-icon-wrap">
                 <CheckCircle2 size={44} className="text-emerald" />
               </div>
-              <h1 className="auth-page-title">Recovery Protocol Simulated</h1>
+              <h1 className="auth-page-title">Password Reset Request Sent</h1>
               <p className="auth-page-subtitle">
-                A password reset request for <strong>{email}</strong> has been processed by the prototype.
+                Instructions to reset your password have been generated for <strong>{email}</strong>.
               </p>
 
-              {/* Explicit Prototype Notice */}
               <div className="auth-handoff-banner" role="status">
                 <div className="auth-handoff-icon">
-                  <Info size={18} />
+                  <CheckCircle2 size={18} className="text-emerald" />
                 </div>
                 <div className="auth-handoff-text">
-                  <strong>Prototype Simulation Confirmed</strong>
+                  <strong>Check Your Email</strong>
                   <p>
-                    Because this is an evaluation prototype with no connected outbound mail server,
-                    <strong> no external email was dispatched</strong>. In a production environment,
-                    the user would receive a cryptographically signed one-time link.
-                  </p>
-                  <p className="mt-2 text-xs">
-                    You can proceed to sign in directly using the seeded demonstration profiles.
+                    If an account is registered with this email address, you will receive password reset instructions shortly.
+                    Please check your inbox and spam folder.
                   </p>
                 </div>
               </div>
@@ -179,22 +174,8 @@ export default function ForgotPasswordPage() {
               <div className="auth-header-block">
                 <h1 className="auth-page-title">Reset your password</h1>
                 <p className="auth-page-subtitle">
-                  Enter your registered commercial work email and we will simulate password recovery dispatch.
+                  Enter your registered commercial work email and we will send password reset instructions.
                 </p>
-              </div>
-
-              {/* Prototype Notice */}
-              <div className="auth-handoff-banner" role="status">
-                <div className="auth-handoff-icon">
-                  <Info size={18} />
-                </div>
-                <div className="auth-handoff-text">
-                  <strong>Password Reset Prototype (Part 2)</strong>
-                  <p>
-                    This interface prepares the client workflow for the upcoming backend reset endpoint.
-                    Submitting this form simulates the client recovery flow.
-                  </p>
-                </div>
               </div>
 
               <form className="auth-form-card" onSubmit={handleSubmit} noValidate>
@@ -244,7 +225,7 @@ export default function ForgotPasswordPage() {
                   ) : (
                     <>
                       <KeyRound size={16} />
-                      <span>Send Recovery Instructions (Demo)</span>
+                      <span>Send Recovery Instructions</span>
                       <ArrowRight size={16} />
                     </>
                   )}

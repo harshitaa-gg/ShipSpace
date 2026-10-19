@@ -292,7 +292,7 @@ export default function SearchListingsPage() {
             <h1 className="workspace-title">Search &amp; Book LCL Cargo Space</h1>
             <p className="workspace-subtitle">
               Query live container capacity across global trade lanes and reserve space with
-              database-enforced tariff calculation.
+              instant price calculation.
             </p>
           </div>
 
@@ -331,8 +331,8 @@ export default function SearchListingsPage() {
               <h2>Route, Cargo &amp; Capacity Requirements</h2>
               <span className={`mode-pill ${searchMode === 'search' ? 'mode-exact' : 'mode-catalog'}`}>
                 {searchMode === 'search'
-                  ? 'Exact Tariff Search (/api/trader/listings/search)'
-                  : 'Open Marketplace Catalog (/api/trader/listings)'}
+                  ? 'Filtered Search Results'
+                  : 'Open Marketplace Catalog'}
               </span>
             </div>
 
@@ -495,9 +495,7 @@ export default function SearchListingsPage() {
           {searchMode === 'catalog' && (
             <div className="search-helper-strip">
               <span>
-                Tip: Select all 5 criteria (Origin, Destination, Cargo Type, Volume &amp; Weight) to
-                run the exact PostgreSQL tariff search endpoint, or browse filtered open listings
-                below.
+                Tip: Specify your origin, destination, cargo type, volume, and weight to calculate exact freight tariffs, or browse available listings below.
               </span>
             </div>
           )}
@@ -518,7 +516,7 @@ export default function SearchListingsPage() {
         <div className="results-toolbar">
           <div className="results-count-text">
             {loading ? (
-              <span>Querying PostgreSQL capacity listings...</span>
+              <span>Searching available capacity listings...</span>
             ) : (
               <span>
                 Showing <strong>{listings.length}</strong> available LCL capacity{' '}

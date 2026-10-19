@@ -126,7 +126,7 @@ export default function MyBookingsPage() {
       const res = await api.cancelTraderBooking(cancelTarget.booking_id, selectedTraderId);
       setFeedbackBanner({
         type: 'success',
-        text: `Booking #${cancelTarget.booking_id} cancelled via sp_cancel_booking. Restored ${cancelTarget.booked_cbm} CBM and ${cancelTarget.booked_weight}t back to Listing #${cancelTarget.listing_id}.`,
+        text: `Booking #${cancelTarget.booking_id} cancelled. Restored ${cancelTarget.booked_cbm} CBM and ${cancelTarget.booked_weight}t capacity back to the listing.`,
       });
       setCancelTarget(null);
       await loadBookings();
@@ -164,7 +164,7 @@ export default function MyBookingsPage() {
             </div>
             <h1 className="workspace-title">My LCL Cargo Bookings</h1>
             <p className="workspace-subtitle">
-              Track confirmed shipments, inspect PostgreSQL trigger audit trails, or cancel active
+              Track confirmed shipments, inspect shipment status history, or cancel active
               reservations with automatic capacity restoration.
             </p>
           </div>
@@ -502,7 +502,7 @@ export default function MyBookingsPage() {
               </div>
 
               <p className="modal-helper-text" style={{ fontSize: '12px' }}>
-                Executed via <code>shipspace.sp_cancel_booking</code> in PostgreSQL. Capacity is returned to Listing #{cancelTarget.listing_id} and an audit event is appended to <code>booking_status_history</code>.
+                Once cancelled, the reserved capacity will be immediately returned to the listing and a status change record will be created.
               </p>
             </div>
 
@@ -540,7 +540,7 @@ export default function MyBookingsPage() {
           >
             <div className="modal-header">
               <div>
-                <span className="modal-eyebrow">BOOKING RECORD &amp; TRIGGER AUDIT TRAIL</span>
+                <span className="modal-eyebrow">BOOKING DETAILS &amp; HISTORY</span>
                 <h3 className="modal-title">Booking #{inspectedBooking.booking_id} Details</h3>
               </div>
               <button
@@ -554,7 +554,7 @@ export default function MyBookingsPage() {
 
             <div className="modal-body">
               {inspectLoading || inspectedBooking.loading ? (
-                <p>Loading booking details and status history from PostgreSQL...</p>
+                <p>Loading booking details and status history...</p>
               ) : (
                 <>
                   <div className="booking-receipt-grid">
@@ -598,8 +598,7 @@ export default function MyBookingsPage() {
                   </div>
 
                   <h4 className="audit-section-heading">
-                    <History size={16} className="text-orange" /> Status Audit Log (
-                    <code>booking_status_history</code>)
+                    <History size={16} className="text-orange" /> Status History Timeline
                   </h4>
 
                   {!inspectedBooking.status_history ||

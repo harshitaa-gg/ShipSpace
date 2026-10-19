@@ -260,7 +260,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
                 type="button"
                 className="topbar-identity-pill"
                 onClick={() => setIdentityModalOpen(true)}
-                title="Switch active Demo Session (Trader/Provider/Admin)"
+                title="Switch active account profile"
               >
                 <UserCheck size={14} className="identity-pill-icon" />
                 <span className="identity-pill-role">{badge.role}:</span>
@@ -354,7 +354,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
                   }}
                 >
                   <UserCheck size={14} />
-                  <span>Demo Switcher ({badge.role} #{badge.id})</span>
+                  <span>Switch Account ({badge.role})</span>
                 </button>
               </div>
             </nav>
@@ -362,7 +362,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
         )}
       </header>
 
-      {/* Demo Role & Identity Switcher Modal */}
+      {/* Account Switcher Modal */}
       {identityModalOpen && (
         <div className="modal-backdrop" onClick={() => setIdentityModalOpen(false)}>
           <div
@@ -374,7 +374,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
           >
             <div className="modal-header">
               <div>
-                <span className="modal-eyebrow">DEMO SESSION IDENTITY SWITCHER</span>
+                <span className="modal-eyebrow">ACCOUNT SWITCHER</span>
                 <h3 id="identity-modal-title" className="modal-title">
                   Select Active ShipSpace Account
                 </h3>
@@ -391,8 +391,7 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
 
             <div className="modal-body">
               <p className="modal-helper-text">
-                ShipSpace connects directly to the PostgreSQL database via the Phase 7 Express API. Choose which seeded
-                Trader, Logistics Provider, or Administrator account to act as across the platform.
+                Quickly switch between accounts to explore the platform from the perspective of a Trader, Logistics Provider, or Platform Administrator.
               </p>
 
               {/* Trader Selector */}
@@ -495,14 +494,14 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
             <div className="modal-footer">
               <div className="modal-db-indicator">
                 <Database size={14} />
-                <span>PostgreSQL Live Session</span>
+                <span>Live Account Sync</span>
               </div>
               <button
                 type="button"
                 className="btn-orange-primary"
                 onClick={() => setIdentityModalOpen(false)}
               >
-                Apply Session Identity
+                Done
               </button>
             </div>
           </div>

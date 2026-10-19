@@ -160,7 +160,7 @@ export default function LoginPage() {
 
             <h2 className="auth-pane-heading">
               {role === 'admin'
-                ? 'Oversee Global Fleet Capacity, Operations & Database Logs'
+                ? 'Oversee Global Fleet Capacity, Operations & Platform Logs'
                 : role === 'provider'
                 ? 'Monetize Scheduled Container Capacity In Real-Time'
                 : 'Discover & Book Verified LCL Container Space'}
@@ -168,7 +168,7 @@ export default function LoginPage() {
 
             <p className="auth-pane-desc">
               {role === 'admin'
-                ? 'Access real-time database views, monitor trigger audit logs in booking_status_history, track corridor capacity utilization, and manage user accounts and reference master data.'
+                ? 'Access real-time platform metrics, monitor booking audit history, track corridor capacity utilization, and manage user accounts and reference master data.'
                 : role === 'provider'
                 ? 'Join ocean freight consolidators and asset operators managing voyage schedules, tracking CBM/tonne utilization, and accepting verified digital cargo reservations.'
                 : 'Join international exporters and shippers reserving fractional container capacity on high-volume ocean lanes with automated W/M tariffs and guaranteed allocations.'}
@@ -183,8 +183,8 @@ export default function LoginPage() {
                       <ShieldCheck size={18} />
                     </div>
                     <div>
-                      <strong>Database Trigger Audit Logs</strong>
-                      <span>Real-time status transitions tracked via booking_status_history</span>
+                      <strong>System Audit Logging</strong>
+                      <span>Real-time status transitions and operational traceability</span>
                     </div>
                   </div>
                   <div className="auth-pane-feature-item">
@@ -193,7 +193,7 @@ export default function LoginPage() {
                     </div>
                     <div>
                       <strong>Corridor &amp; Fleet Analytics</strong>
-                      <span>v_admin_platform_summary and v_admin_capacity_overview views</span>
+                      <span>Real-time platform summaries and route utilization reports</span>
                     </div>
                   </div>
                   <div className="auth-pane-feature-item">
@@ -295,49 +295,8 @@ export default function LoginPage() {
           <div className="auth-header-block">
             <h1 className="auth-page-title">Sign in to ShipSpace</h1>
             <p className="auth-page-subtitle">
-              Enter your verified credentials to access your commercial freight workspace.
+              Enter your commercial credentials to access your freight workspace.
             </p>
-          </div>
-
-          {/* Prototype Demonstration Banner & Quick Switcher */}
-          <div className="auth-handoff-banner" role="status">
-            <div className="auth-handoff-icon">
-              <Info size={18} />
-            </div>
-            <div className="auth-handoff-text">
-              <strong>B2B Authentication Prototype (Part 2)</strong>
-              <p>
-                In this prototype demonstration, signing in simulates session creation and activates
-                the selected role in the live database.
-              </p>
-              <div className="auth-quick-fill-row">
-                <span>Quick Fill:</span>
-                <button
-                  type="button"
-                  className="auth-quick-chip"
-                  onClick={() => fillQuickDemo('trader')}
-                >
-                  <Briefcase size={12} />
-                  <span>Trader #7 (Aarav)</span>
-                </button>
-                <button
-                  type="button"
-                  className="auth-quick-chip"
-                  onClick={() => fillQuickDemo('provider')}
-                >
-                  <Building2 size={12} />
-                  <span>Provider #1 (Maersk)</span>
-                </button>
-                <button
-                  type="button"
-                  className="auth-quick-chip"
-                  onClick={() => fillQuickDemo('admin')}
-                >
-                  <ShieldCheck size={12} />
-                  <span>Admin #27 (ShipSpace)</span>
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Role Selector Tabs */}
@@ -518,12 +477,19 @@ export default function LoginPage() {
               {isSubmitting ? (
                 <>
                   <Loader2 size={16} className="animate-spin" />
-                  <span>Authenticating Session...</span>
+                  <span>Signing in...</span>
                 </>
               ) : (
                 <>
                   <LogIn size={16} />
-                  <span>Sign In as {role === 'provider' ? 'Logistics Provider' : 'Cargo Trader'}</span>
+                  <span>
+                    Sign In as{' '}
+                    {role === 'admin'
+                      ? 'Platform Administrator'
+                      : role === 'provider'
+                      ? 'Logistics Provider'
+                      : 'Cargo Trader'}
+                  </span>
                   <ArrowRight size={16} />
                 </>
               )}
@@ -532,13 +498,36 @@ export default function LoginPage() {
 
           {/* Registration Redirect Footer */}
           <div className="auth-footer-nav">
-            <span>New to ShipSpace freight marketplace?</span>
-            <Link
-              to={`/register?role=${role}`}
-              className="auth-accent-link"
-            >
+            <span>New to ShipSpace?</span>
+            <Link to={`/register?role=${role === 'admin' ? 'trader' : role}`} className="auth-accent-link">
               Create a {role === 'provider' ? 'Provider' : 'Trader'} account →
             </Link>
+          </div>
+
+          {/* Discreet Evaluation Shortcuts */}
+          <div className="auth-demo-bar">
+            <span className="auth-demo-caption">Demo Credentials:</span>
+            <button
+              type="button"
+              className="auth-demo-chip"
+              onClick={() => fillQuickDemo('trader')}
+            >
+              Trader #7
+            </button>
+            <button
+              type="button"
+              className="auth-demo-chip"
+              onClick={() => fillQuickDemo('provider')}
+            >
+              Provider #1
+            </button>
+            <button
+              type="button"
+              className="auth-demo-chip"
+              onClick={() => fillQuickDemo('admin')}
+            >
+              Admin #27
+            </button>
           </div>
         </div>
       </div>

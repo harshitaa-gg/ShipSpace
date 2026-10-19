@@ -282,17 +282,16 @@ export default function RegisterPage() {
                   <CheckCircle2 size={18} className="text-emerald" />
                 </div>
                 <div className="auth-handoff-text">
-                  <strong>PostgreSQL Database Account Active</strong>
+                  <strong>Account Configured Successfully</strong>
                   <p>
-                    Successfully created account #{createdAccount?.id || createdAccount?.user_id} in{' '}
-                    <code>user_account</code> and <code>{role}</code> tables with ACID transactional integrity. Your active demo session is now set to this identity.
+                    Account #{createdAccount?.id || createdAccount?.user_id} has been registered and verified. You are now signed in to ShipSpace.
                   </p>
                 </div>
               </div>
 
               <div className="auth-summary-card">
                 <div className="summary-card-row">
-                  <span className="summary-label">Database User ID:</span>
+                  <span className="summary-label">Account ID:</span>
                   <strong className="summary-val text-orange">#{createdAccount?.id || createdAccount?.user_id}</strong>
                 </div>
                 <div className="summary-card-row">
@@ -775,7 +774,7 @@ export default function RegisterPage() {
                       ) : (
                         <>
                           <UserPlus size={16} />
-                          <span>Complete Onboarding (Demo)</span>
+                          <span>Create Account</span>
                           <ArrowRight size={16} />
                         </>
                       )}

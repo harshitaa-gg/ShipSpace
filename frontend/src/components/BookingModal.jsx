@@ -217,8 +217,7 @@ export default function BookingModal({
               <div>
                 <h4>Booking #{createdBooking.booking_id} Confirmed!</h4>
                 <p>
-                  Executed via PostgreSQL stored procedure <code>sp_create_booking</code> with row-level
-                  capacity locking and audit logging.
+                  Your Less-than-Container Load space reservation has been locked and confirmed.
                 </p>
               </div>
             </div>
@@ -418,7 +417,7 @@ export default function BookingModal({
                     required
                   />
                   <span className="form-hint">
-                    Sent to DB as <strong>{bookedWeightTonnes.toFixed(2)} tonnes</strong> (${Number(listing.price_per_tonne).toFixed(2)}/t)
+                    Calculated as <strong>{bookedWeightTonnes.toFixed(2)} tonnes</strong> (${Number(listing.price_per_tonne).toFixed(2)}/t)
                   </span>
                 </div>
               </div>
@@ -428,7 +427,7 @@ export default function BookingModal({
                 <div className="pricing-preview-box">
                   <div className="pricing-preview-header">
                     <Calculator size={15} className="text-orange" />
-                    <span>Live Tariff Calculation (fn_calculate_booking_price)</span>
+                    <span>Live Tariff Calculation (W/M Standard)</span>
                   </div>
                   <div className="pricing-preview-rows">
                     <div className="pricing-row">
