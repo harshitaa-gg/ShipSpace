@@ -25,4 +25,10 @@ router.get("/bookings/:bookingId", traderController.getBookingDetails);
 router.post("/bookings/:bookingId/cancel", traderController.cancelBookingByTrader);
 router.patch("/bookings/:bookingId/cancel", traderController.cancelBookingByTrader);
 
+// Feature A: Itemised All-In Freight Quote (does not create booking or reserve capacity)
+router.get("/listings/:listingId/quote", traderController.getListingQuote);
+router.post("/listings/:listingId/quote", traderController.getListingQuote);
+router.get("/quote", traderController.getListingQuote);
+router.post("/quote", traderController.getListingQuote);
+
 module.exports = router;

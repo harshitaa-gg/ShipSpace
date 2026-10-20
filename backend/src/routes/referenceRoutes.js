@@ -15,4 +15,8 @@ router.post("/routes", referenceController.createRoute);
 router.get("/cargo-types", referenceController.getCargoTypes);
 router.post("/cargo-types", referenceController.createCargoType);
 
+// Standard Charge Types Catalogue (Feature A)
+router.get("/charge-types", referenceController.getChargeTypes);
+router.get("/standard-charge-types", referenceController.getChargeTypes);
+
 module.exports = router;

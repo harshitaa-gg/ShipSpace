@@ -81,7 +81,17 @@ app.get("/api/listings/:listingId", providerController.getListingById);
 app.post("/api/listings", providerController.createListing);
 app.patch("/api/listings/:listingId/status", providerController.updateListingStatus);
 
+// Feature A: Top-level REST resource aliases for listing pricing and trader quotes
+app.get("/api/listings/:listingId/pricing", providerController.getListingPricing);
+app.put("/api/listings/:listingId/pricing", providerController.upsertListingPricing);
+app.post("/api/listings/:listingId/pricing", providerController.upsertListingPricing);
+app.get("/api/listings/:listingId/quote", traderController.getListingQuote);
+app.post("/api/listings/:listingId/quote", traderController.getListingQuote);
+app.get("/api/quotes", traderController.getListingQuote);
+app.post("/api/quotes", traderController.getListingQuote);
+
 app.get("/api/bookings", traderController.getTraderBookings);
+
 app.post("/api/bookings", traderController.createBooking);
 app.get("/api/bookings/:bookingId", traderController.getBookingDetails);
 app.post("/api/bookings/:bookingId/cancel", traderController.cancelBookingByTrader);

@@ -161,6 +161,8 @@ async function createCargoType({ name, description, admin_id }) {
     });
 }
 
+const { getStandardChargeTypes } = require("./pricingEngine");
+
 module.exports = {
     getAllPorts,
     createPort,
@@ -168,4 +170,5 @@ module.exports = {
     createRoute,
     getAllCargoTypes,
     createCargoType,
+    getStandardChargeTypes,
 };

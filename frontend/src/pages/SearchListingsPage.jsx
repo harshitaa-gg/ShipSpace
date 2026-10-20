@@ -17,10 +17,12 @@ import {
   Package,
   FileText,
   Clock,
+  Calculator,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
 import BookingModal from '../components/BookingModal';
+import { LiveQuoteBreakdown } from '../components/ItemisedCostBreakdown';
 import { isListingCutoffValid } from './ProviderDashboardPage';
 
 export default function SearchListingsPage() {
@@ -60,12 +62,44 @@ export default function SearchListingsPage() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [bookingListing, setBookingListing] = useState(null);
 
+  // Feature A: Inline itemised quote preview per listing card
+  const [expandedQuoteListingId, setExpandedQuoteListingId] = useState(null);
+  const [cardQuoteData, setCardQuoteData] = useState(null);
+  const [cardQuoteLoading, setCardQuoteLoading] = useState(false);
+  const [cardQuoteError, setCardQuoteError] = useState(null);
+
   // Convert current weightInput to tonnes for backend API calls
   const requiredWeightTonnes = useMemo(() => {
     const val = parseFloat(weightInput);
     if (!Number.isFinite(val) || val <= 0) return '';
     return weightUnit === 'kg' ? Number((val / 1000).toFixed(4)) : val;
   }, [weightInput, weightUnit]);
+
+  const handleToggleListingQuote = async (listingId) => {
+    if (expandedQuoteListingId === listingId) {
+      setExpandedQuoteListingId(null);
+      return;
+    }
+    setExpandedQuoteListingId(listingId);
+    setCardQuoteLoading(true);
+    setCardQuoteError(null);
+    setCardQuoteData(null);
+
+    const effCbm = Number(requiredCbm) > 0 ? Number(requiredCbm) : 2.5;
+    const effWeight = Number(requiredWeightTonnes) > 0 ? Number(requiredWeightTonnes) : 1.2;
+
+    try {
+      const res = await api.getListingQuote(listingId, {
+        cbm: Number(effCbm.toFixed(2)),
+        weight: Number(effWeight.toFixed(2)),
+      });
+      setCardQuoteData(res.data || null);
+    } catch (err) {
+      setCardQuoteError(err.message || 'Failed to load itemised quote for this listing.');
+    } finally {
+      setCardQuoteLoading(false);
+    }
+  };
 
   const handleUnitSwitch = (newUnit) => {
     if (newUnit === weightUnit) return;
@@ -780,12 +814,25 @@ export default function SearchListingsPage() {
                     <div className="listing-cta-group">
                       <div className="estimated-price-block">
                         <span className="est-price-label">
-                          {requiredCbm && requiredWeightTonnes ? 'Estimated Total' : 'Starting From'}
+                          {requiredCbm && requiredWeightTonnes ? 'Estimated Base' : 'Starting From'}
                         </span>
                         <strong className="est-price-value">
                           ${Number(item.estimated_total_price || item.minimum_charge).toFixed(2)}
                         </strong>
                       </div>
+
+                      <button
+                        type="button"
+                        className="btn-secondary-sm"
+                        onClick={() => handleToggleListingQuote(item.listing_id)}
+                      >
+                        <Calculator size={14} />
+                        <span>
+                          {expandedQuoteListingId === item.listing_id
+                            ? 'Hide Quote'
+                            : 'Itemised Quote'}
+                        </span>
+                      </button>
 
                       <button
                         type="button"
@@ -798,6 +845,16 @@ export default function SearchListingsPage() {
                       </button>
                     </div>
                   </div>
+
+                  {expandedQuoteListingId === item.listing_id && (
+                    <div style={{ marginTop: '12px' }}>
+                      <LiveQuoteBreakdown
+                        quote={cardQuoteData}
+                        loading={cardQuoteLoading}
+                        error={cardQuoteError}
+                      />
+                    </div>
+                  )}
                 </article>
               );
             })}

@@ -392,6 +392,31 @@ async function cancelBookingByProvider({ bookingId, providerId, reason }) {
     });
 }
 
+const pricingEngine = require("./pricingEngine");
+
+async function getListingPricing(listingId, { providerId = null } = {}) {
+    const pricing = await pricingEngine.getListingPricing(listingId);
+    if (providerId !== null && providerId !== undefined) {
+        if (Number(pricing.provider_id) !== Number(providerId)) {
+            throw new AppError(
+                `Forbidden (Rule R8): Listing ID ${listingId} does not belong to Provider ID ${providerId}`,
+                403,
+                "FORBIDDEN_OWNERSHIP"
+            );
+        }
+    }
+    return pricing;
+}
+
+async function upsertListingPricing({ listingId, providerId, pricingRule, chargeItems }) {
+    return pricingEngine.upsertListingPricing({
+        listingId,
+        providerId,
+        pricingRule,
+        chargeItems,
+    });
+}
+
 module.exports = {
     createListing,
     getProviderListings,
@@ -399,4 +424,6 @@ module.exports = {
     getProviderBookings,
     updateListingStatus,
     cancelBookingByProvider,
+    getListingPricing,
+    upsertListingPricing,
 };

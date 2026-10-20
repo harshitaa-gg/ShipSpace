@@ -24,4 +24,12 @@ router.get("/listings/:listingId/bookings", providerController.getProviderBookin
 router.post("/bookings/:bookingId/cancel", providerController.cancelBookingByProvider);
 router.patch("/bookings/:bookingId/cancel", providerController.cancelBookingByProvider);
 
+// Feature A: Listing Pricing Rules & Charge Items
+router.get("/listings/:listingId/pricing", providerController.getListingPricing);
+router.get("/:providerId/listings/:listingId/pricing", providerController.getListingPricing);
+router.put("/:providerId/listings/:listingId/pricing", providerController.upsertListingPricing);
+router.post("/:providerId/listings/:listingId/pricing", providerController.upsertListingPricing);
+router.put("/listings/:listingId/pricing", providerController.upsertListingPricing);
+router.post("/listings/:listingId/pricing", providerController.upsertListingPricing);
+
 module.exports = router;

@@ -16,9 +16,11 @@ import {
   Search,
   X,
   Clock,
+  Lock,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
+import { SavedBookingSnapshotBreakdown } from '../components/ItemisedCostBreakdown';
 
 export default function MyBookingsPage() {
   const {
@@ -30,6 +32,8 @@ export default function MyBookingsPage() {
   } = useIdentity();
 
   const [bookings, setBookings] = useState([]);
+  const [bookingDetailsMap, setBookingDetailsMap] = useState({});
+  const [expandedSnapshotId, setExpandedSnapshotId] = useState(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
@@ -52,7 +56,20 @@ export default function MyBookingsPage() {
       const res = await api.getTraderBookings(selectedTraderId, {
         status: statusFilter || undefined,
       });
-      setBookings(res.data || []);
+      const rows = res.data || [];
+      setBookings(rows);
+
+      // Hydrate frozen financial snapshots from GET /api/bookings/:bookingId
+      const settled = await Promise.allSettled(
+        rows.map((b) => api.getBookingDetails(b.booking_id))
+      );
+      const nextMap = {};
+      settled.forEach((result, idx) => {
+        if (result.status === 'fulfilled' && result.value?.data) {
+          nextMap[rows[idx].booking_id] = result.value.data;
+        }
+      });
+      setBookingDetailsMap(nextMap);
     } catch (err) {
       setErrorMsg(err.message || 'Unable to load bookings for this trader.');
       setBookings([]);
@@ -73,7 +90,11 @@ export default function MyBookingsPage() {
       .reduce((acc, b) => acc + Number(b.booked_cbm || 0), 0);
     const totalValue = bookings
       .filter((b) => b.booking_status !== 'cancelled')
-      .reduce((acc, b) => acc + Number(b.total_price || 0), 0);
+      .reduce((acc, b) => {
+        const detail = bookingDetailsMap[b.booking_id];
+        const frozenTotal = detail?.itemised_cost_summary?.total_all_in_cost ?? b.total_price;
+        return acc + Number(frozenTotal || 0);
+      }, 0);
 
     return {
       totalCount,
@@ -81,7 +102,7 @@ export default function MyBookingsPage() {
       activeCbm: activeCbm.toFixed(2),
       totalValue: totalValue.toFixed(2),
     };
-  }, [bookings]);
+  }, [bookings, bookingDetailsMap]);
 
   const filteredBookings = useMemo(() => {
     if (!searchQuery.trim()) return bookings;
@@ -100,12 +121,33 @@ export default function MyBookingsPage() {
     });
   }, [bookings, searchQuery]);
 
+  const handleToggleSnapshot = async (bookingId) => {
+    if (expandedSnapshotId === bookingId) {
+      setExpandedSnapshotId(null);
+      return;
+    }
+    setExpandedSnapshotId(bookingId);
+    if (!bookingDetailsMap[bookingId]) {
+      try {
+        const res = await api.getBookingDetails(bookingId);
+        if (res.data) {
+          setBookingDetailsMap((prev) => ({ ...prev, [bookingId]: res.data }));
+        }
+      } catch (_err) {
+        // Handled gracefully by fallback
+      }
+    }
+  };
+
   const handleInspectBooking = async (bookingId) => {
     setInspectLoading(true);
     setInspectedBooking({ booking_id: bookingId, loading: true });
     try {
       const res = await api.getBookingDetails(bookingId);
       setInspectedBooking(res.data);
+      if (res.data) {
+        setBookingDetailsMap((prev) => ({ ...prev, [bookingId]: res.data }));
+      }
     } catch (err) {
       setFeedbackBanner({
         type: 'error',
@@ -347,6 +389,12 @@ export default function MyBookingsPage() {
             {filteredBookings.map((b) => {
               const canCancel =
                 b.booking_status === 'confirmed' || b.booking_status === 'pending';
+              const detail = bookingDetailsMap[b.booking_id] || null;
+              const summary = detail?.itemised_cost_summary || null;
+              const isItemised = detail ? !detail.is_legacy_booking : false;
+              const displayTotal = isItemised
+                ? Number(summary?.total_all_in_cost ?? b.total_price)
+                : Number(b.total_price);
 
               return (
                 <article key={b.booking_id} className="booking-row-card">
@@ -359,6 +407,17 @@ export default function MyBookingsPage() {
                       <span className="booking-listing-ref">
                         Listing #{b.listing_id} ({b.listing_status})
                       </span>
+                      {detail && (
+                        <span
+                          className={`cost-mode-pill ${
+                            isItemised ? 'cost-mode-itemised' : 'cost-mode-legacy'
+                          }`}
+                        >
+                          {isItemised
+                            ? `${detail.charge_snapshots?.length || 0} Frozen Charge Lines`
+                            : 'Legacy Base Freight'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="booking-timestamp">
@@ -415,13 +474,33 @@ export default function MyBookingsPage() {
                     {/* Total & Actions */}
                     <div className="booking-actions-col">
                       <div className="booking-price-display">
-                        <span className="metric-caption">Total Charged</span>
+                        <span className="metric-caption">
+                          {isItemised ? 'Frozen All-In Total' : 'Total Charged'}
+                        </span>
                         <strong className="booking-price-amount">
-                          ${Number(b.total_price).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                          ${displayTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </strong>
+                        {isItemised && (
+                          <span className="text-muted-sm">
+                            Base: ${Number(b.total_price).toFixed(2)}
+                          </span>
+                        )}
                       </div>
 
                       <div className="booking-btn-group">
+                        <button
+                          type="button"
+                          className="btn-secondary-sm"
+                          onClick={() => handleToggleSnapshot(b.booking_id)}
+                        >
+                          <Lock size={13} />
+                          <span>
+                            {expandedSnapshotId === b.booking_id
+                              ? 'Hide Snapshot'
+                              : 'Cost Snapshot'}
+                          </span>
+                        </button>
+
                         <button
                           type="button"
                           className="btn-secondary-sm"
@@ -444,6 +523,12 @@ export default function MyBookingsPage() {
                       </div>
                     </div>
                   </div>
+
+                  {expandedSnapshotId === b.booking_id && (
+                    <div style={{ marginTop: '12px' }}>
+                      <SavedBookingSnapshotBreakdown booking={detail || b} />
+                    </div>
+                  )}
                 </article>
               );
             })}
@@ -533,7 +618,7 @@ export default function MyBookingsPage() {
       {inspectedBooking && (
         <div className="modal-backdrop" onClick={() => setInspectedBooking(null)}>
           <div
-            className="modal-card"
+            className="modal-card modal-card-lg"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -590,12 +675,15 @@ export default function MyBookingsPage() {
                       </span>
                     </div>
                     <div className="receipt-item">
-                      <span className="receipt-label">Total Freight Charge</span>
-                      <span className="receipt-value text-orange">
+                      <span className="receipt-label">Base Freight (booking.total_price)</span>
+                      <span className="receipt-value">
                         ${Number(inspectedBooking.total_price).toFixed(2)} USD
                       </span>
                     </div>
                   </div>
+
+                  {/* Frozen Booking Price Snapshot */}
+                  <SavedBookingSnapshotBreakdown booking={inspectedBooking} />
 
                   <h4 className="audit-section-heading">
                     <History size={16} className="text-orange" /> Status History Timeline

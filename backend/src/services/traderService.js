@@ -152,10 +152,13 @@ async function searchMatchingCapacity({
     return rows;
 }
 
+const pricingEngine = require("./pricingEngine");
+
 /**
  * Creates a booking transactionally using PostgreSQL stored procedure sp_create_booking,
  * preserving SELECT ... FOR UPDATE row locking, capacity checks, price snapshot calculation,
- * and booking_status_history audit logging inside the database engine.
+ * and booking_status_history audit logging inside the database engine, then freezes
+ * itemised charge snapshots into booking_charge_snapshot within the same transaction.
  */
 async function createBooking({
     trader_id,
@@ -163,6 +166,7 @@ async function createBooking({
     cargo_type_id,
     booked_cbm,
     booked_weight,
+    transformSnapshots = null,
 }) {
     return pool.withTransaction(async (client) => {
         // Verify trader account exists (Rule R8)
@@ -174,13 +178,23 @@ async function createBooking({
             throw new AppError(`Trader ID ${trader_id} does not exist`, 404, "TRADER_NOT_FOUND");
         }
 
-        // Delegate booking validation, row locking, price calculation, capacity deduction & audit log to sp_create_booking
+        // 1. Delegate booking validation, row locking, base price calculation, capacity deduction & audit log to sp_create_booking
         const callRes = await client.query(
             `CALL sp_create_booking($1::bigint, $2::bigint, $3::bigint, $4::numeric, $5::numeric, NULL)`,
             [trader_id, listing_id, cargo_type_id, booked_cbm, booked_weight]
         );
         const bookingId = callRes.rows[0]?.p_booking_id;
 
+        // 2. Calculate quote and insert immutable booking_charge_snapshot rows within the same transaction
+        await pricingEngine.createBookingChargeSnapshots(client, {
+            bookingId,
+            listingId: listing_id,
+            bookedCbm: booked_cbm,
+            bookedWeight: booked_weight,
+            transformSnapshots,
+        });
+
+        // 3. Read back the created booking, updated listing capacity, and frozen financial snapshot
         const bookingRes = await client.query(
             `SELECT * FROM v_trader_bookings WHERE booking_id = $1`,
             [bookingId]
@@ -191,10 +205,24 @@ async function createBooking({
              WHERE id = $1`,
             [listing_id]
         );
+        const financialSnapshot = await pricingEngine.getBookingFinancialSnapshot(
+            bookingId,
+            client
+        );
+
+        const enrichedBooking = {
+            ...bookingRes.rows[0],
+            is_legacy_booking: financialSnapshot.is_legacy_booking,
+            itemised_cost_summary: financialSnapshot.summary,
+            charge_snapshots: financialSnapshot.snapshots,
+        };
 
         return {
-            booking: bookingRes.rows[0],
+            booking: enrichedBooking,
             listing_capacity: listingRes.rows[0],
+            is_legacy_booking: financialSnapshot.is_legacy_booking,
+            itemised_cost_summary: financialSnapshot.summary,
+            charge_snapshots: financialSnapshot.snapshots,
         };
     });
 }
@@ -247,27 +275,33 @@ async function getBookingDetails(bookingId, { trader_id = null, provider_id = nu
         );
     }
 
-    const historyRes = await pool.query(
-        `SELECT
-            h.id AS history_id,
-            h.booking_id,
-            h.changed_by_user_id,
-            u.name AS changed_by_name,
-            u.email AS changed_by_email,
-            u.role AS changed_by_role,
-            h.old_status,
-            h.new_status,
-            h.changed_at,
-            h.reason
-         FROM booking_status_history h
-         JOIN user_account u ON h.changed_by_user_id = u.id
-         WHERE h.booking_id = $1
-         ORDER BY h.changed_at ASC, h.id ASC`,
-        [bookingId]
-    );
+    const [historyRes, financialSnapshot] = await Promise.all([
+        pool.query(
+            `SELECT
+                h.id AS history_id,
+                h.booking_id,
+                h.changed_by_user_id,
+                u.name AS changed_by_name,
+                u.email AS changed_by_email,
+                u.role AS changed_by_role,
+                h.old_status,
+                h.new_status,
+                h.changed_at,
+                h.reason
+             FROM booking_status_history h
+             JOIN user_account u ON h.changed_by_user_id = u.id
+             WHERE h.booking_id = $1
+             ORDER BY h.changed_at ASC, h.id ASC`,
+            [bookingId]
+        ),
+        pricingEngine.getBookingFinancialSnapshot(bookingId),
+    ]);
 
     return {
         ...booking,
+        is_legacy_booking: financialSnapshot.is_legacy_booking,
+        itemised_cost_summary: financialSnapshot.summary,
+        charge_snapshots: financialSnapshot.snapshots,
         status_history: historyRes.rows,
     };
 }
@@ -319,12 +353,40 @@ async function cancelBookingByTrader({ bookingId, traderId, reason }) {
              ORDER BY changed_at ASC, id ASC`,
             [bookingId]
         );
+        const financialSnapshot = await pricingEngine.getBookingFinancialSnapshot(
+            bookingId,
+            client
+        );
 
         return {
-            booking: updatedBookingRes.rows[0],
+            booking: {
+                ...updatedBookingRes.rows[0],
+                is_legacy_booking: financialSnapshot.is_legacy_booking,
+                itemised_cost_summary: financialSnapshot.summary,
+                charge_snapshots: financialSnapshot.snapshots,
+            },
             listing_capacity: updatedListingRes.rows[0],
             status_history: historyRes.rows,
+            is_legacy_booking: financialSnapshot.is_legacy_booking,
+            itemised_cost_summary: financialSnapshot.summary,
+            charge_snapshots: financialSnapshot.snapshots,
         };
+    });
+}
+
+async function getTraderQuote({
+    listingId,
+    cbm,
+    weight,
+    excessStorageDays = 0,
+    asOfDate = null,
+}) {
+    return pricingEngine.getTraderQuote({
+        listingId,
+        cbm,
+        weight,
+        excessStorageDays,
+        asOfDate,
     });
 }
 
@@ -335,4 +397,5 @@ module.exports = {
     getTraderBookings,
     getBookingDetails,
     cancelBookingByTrader,
+    getTraderQuote,
 };

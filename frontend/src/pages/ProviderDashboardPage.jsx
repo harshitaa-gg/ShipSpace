@@ -18,9 +18,11 @@ import {
   Search,
   Clock,
   Lock,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
+import ProviderPricingModal from '../components/ProviderPricingModal';
 
 export function isListingCutoffValid(cutoffValue, nowDate = new Date()) {
   if (!cutoffValue) return false;
@@ -94,6 +96,10 @@ export default function ProviderDashboardPage() {
   const [cancelBookingTarget, setCancelBookingTarget] = useState(null);
   const [cancelBookingReason, setCancelBookingReason] = useState('Voyage schedule adjustment');
   const [cancelListingTarget, setCancelListingTarget] = useState(null);
+
+  // Feature A: Itemised Pricing Editor Modal state
+  const [pricingEditorListing, setPricingEditorListing] = useState(null);
+  const [openPricingAfterCreate, setOpenPricingAfterCreate] = useState(false);
 
   // Create Listing Form State (includes cutoff_date <= departure_date < arrival_date)
   const [routeId, setRouteId] = useState('');
@@ -186,6 +192,9 @@ export default function ProviderDashboardPage() {
       await loadProviderWorkspace();
       refreshCatalog();
       setActiveTab('listings');
+      if (openPricingAfterCreate && res.data) {
+        setPricingEditorListing(res.data);
+      }
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -661,6 +670,14 @@ export default function ProviderDashboardPage() {
                       </div>
 
                       <div className="provider-status-controls">
+                        <button
+                          type="button"
+                          className="btn-secondary-sm"
+                          onClick={() => setPricingEditorListing(item)}
+                        >
+                          <SlidersHorizontal size={13} />
+                          <span>Itemised Pricing</span>
+                        </button>
                         {canReopen && (
                           <button
                             type="button"
@@ -1023,6 +1040,26 @@ export default function ProviderDashboardPage() {
                 </div>
               </div>
 
+              <div className="form-group">
+                <label
+                  className={`checkbox-pill-card ${openPricingAfterCreate ? 'checked' : ''}`}
+                  style={{ maxWidth: '100%' }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={openPricingAfterCreate}
+                    onChange={(e) => setOpenPricingAfterCreate(e.target.checked)}
+                  />
+                  <div>
+                    <strong>Configure Itemised All-In Pricing &amp; Charge Catalogue Next</strong>
+                    <span>
+                      Automatically open the Feature A Itemised Pricing Editor right after
+                      publishing this listing to configure origin, ocean, and destination surcharges.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
               <div className="form-submit-row">
                 <button
                   type="button"
@@ -1044,6 +1081,19 @@ export default function ProviderDashboardPage() {
           </section>
         )}
       </div>
+
+      {/* Feature A: Provider Itemised Pricing & Rules Editor Modal */}
+      {pricingEditorListing && (
+        <ProviderPricingModal
+          listing={pricingEditorListing}
+          providerId={Number(selectedProviderId)}
+          onClose={() => setPricingEditorListing(null)}
+          onSaved={() => {
+            loadProviderWorkspace();
+            refreshCatalog();
+          }}
+        />
+      )}
 
       {/* Provider Cancel Booking Confirmation Modal */}
       {cancelBookingTarget && (

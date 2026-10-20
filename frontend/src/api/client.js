@@ -349,4 +349,18 @@ export const api = {
     });
     return { ...res, data: normalizeCargoType(res.data) };
   },
+
+  // Feature A: Itemised All-In Cost & Quotes
+  getStandardChargeTypes: (params) =>
+    request(`/reference/charge-types${buildQuery(params)}`),
+  getListingPricing: (listingId, params) =>
+    request(`/listings/${listingId}/pricing${buildQuery(params)}`),
+  saveListingPricing: (providerId, listingId, body) =>
+    request(`/provider/${providerId}/listings/${listingId}/pricing`, {
+      method: 'PUT',
+      headers: { 'x-provider-id': String(providerId) },
+      body: JSON.stringify(body),
+    }),
+  getListingQuote: (listingId, params) =>
+    request(`/trader/listings/${listingId}/quote${buildQuery(params)}`),
 };

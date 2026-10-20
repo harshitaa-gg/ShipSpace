@@ -83,6 +83,16 @@ const createCargoType = asyncHandler(async (req, res) => {
     });
 });
 
+const getChargeTypes = asyncHandler(async (req, res) => {
+    const stage = req.query.stage ? String(req.query.stage).trim().toLowerCase() : null;
+    const chargeTypes = await referenceService.getStandardChargeTypes({ stage });
+    res.json({
+        success: true,
+        count: chargeTypes.length,
+        data: chargeTypes,
+    });
+});
+
 module.exports = {
     getPorts,
     createPort,
@@ -90,4 +100,5 @@ module.exports = {
     createRoute,
     getCargoTypes,
     createCargoType,
+    getChargeTypes,
 };

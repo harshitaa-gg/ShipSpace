@@ -150,6 +150,89 @@ const cancelBookingByProvider = asyncHandler(async (req, res) => {
     });
 });
 
+function resolveVerifiedProviderId(req) {
+    const rawAuthProviderId =
+        req.params.providerId ??
+        req.headers["x-provider-id"] ??
+        req.headers["x-user-id"] ??
+        req.query.provider_id;
+
+    if (rawAuthProviderId === undefined || rawAuthProviderId === null || rawAuthProviderId === "") {
+        if (req.body && req.body.provider_id !== undefined && req.body.provider_id !== null) {
+            throw new AppError(
+                "Forbidden: provider_id in request body is not accepted as proof of ownership. Supply provider identity via route parameter (:providerId) or x-provider-id header.",
+                403,
+                "FORBIDDEN_OWNERSHIP"
+            );
+        }
+        throw new AppError(
+            "provider_id is required via route parameter (:providerId) or x-provider-id header",
+            400,
+            "VALIDATION_ERROR"
+        );
+    }
+
+    const authProviderId = parsePositiveInt(rawAuthProviderId, "provider_id");
+
+    if (
+        req.body &&
+        req.body.provider_id !== undefined &&
+        req.body.provider_id !== null &&
+        req.body.provider_id !== ""
+    ) {
+        const bodyProviderId = parsePositiveInt(req.body.provider_id, "body.provider_id");
+        if (bodyProviderId !== authProviderId) {
+            throw new AppError(
+                "Forbidden: request body provider_id conflicts with authenticated provider identity",
+                403,
+                "FORBIDDEN_OWNERSHIP"
+            );
+        }
+    }
+
+    return authProviderId;
+}
+
+const getListingPricing = asyncHandler(async (req, res) => {
+    const listingId = parsePositiveInt(req.params.listingId, "listingId");
+    const providerId = parseOptionalPositiveInt(
+        req.params.providerId ?? req.headers["x-provider-id"] ?? req.query.provider_id,
+        "provider_id"
+    );
+
+    const data = await providerService.getListingPricing(listingId, { providerId });
+
+    res.json({
+        success: true,
+        data,
+    });
+});
+
+const upsertListingPricing = asyncHandler(async (req, res) => {
+    const listingId = parsePositiveInt(req.params.listingId, "listingId");
+    const providerId = resolveVerifiedProviderId(req);
+
+    const body = req.body || {};
+    const pricingRule = body.pricing_rule ?? body.pricingRule;
+    const chargeItems =
+        body.charge_items ??
+        body.chargeItems ??
+        (Array.isArray(body.charges) ? body.charges : undefined);
+
+    const data = await providerService.upsertListingPricing({
+        listingId,
+        providerId,
+        pricingRule,
+        chargeItems,
+    });
+
+    res.json({
+        success: true,
+        message: "Listing pricing rules and charge items saved successfully",
+        data,
+    });
+});
+
 module.exports = {
     createListing,
     getProviderListings,
@@ -157,4 +240,6 @@ module.exports = {
     getProviderBookings,
     updateListingStatus,
     cancelBookingByProvider,
+    getListingPricing,
+    upsertListingPricing,
 };

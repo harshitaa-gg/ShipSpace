@@ -4444,3 +4444,489 @@ code {
     font-size: 24px;
   }
 }
+
+/* ============================================================================
+   FEATURE A: ITEMISED ALL-IN COST BREAKDOWN & PROVIDER PRICING EDITOR
+   ============================================================================ */
+
+.modal-card-lg {
+  max-width: 780px;
+}
+
+.modal-card-xl {
+  max-width: 960px;
+}
+
+.itemised-cost-panel {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+}
+
+.snapshot-cost-panel {
+  background: #f8fafc;
+}
+
+.itemised-cost-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.itemised-cost-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13.5px;
+  color: #0f172a;
+}
+
+.cost-mode-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 99px;
+  letter-spacing: 0.02em;
+}
+
+.cost-mode-itemised {
+  background: #ffedd5;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+}
+
+.cost-mode-legacy {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.cost-legacy-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.cost-notice-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: #d97706;
+}
+
+.cost-quantities-strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.cost-lines-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.cost-lines-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  background: #ffffff;
+}
+
+.cost-lines-table th {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.cost-lines-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+  color: #1e293b;
+}
+
+.cost-lines-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.cost-row-excluded {
+  background: #fef2f2;
+}
+
+.cost-row-muted {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.cost-line-name {
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 3px;
+}
+
+.cost-stage-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.stage-origin {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.stage-ocean {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.stage-destination {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
+.cost-basis-cell {
+  font-size: 12px;
+  color: #475569;
+  max-width: 240px;
+}
+
+.cost-payer-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cost-payer-tag {
+  font-weight: 600;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.cost-timing-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cost-badges-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.cost-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.cost-badge-charged {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.cost-badge-included {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.cost-badge-not-charged {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.cost-badge-excluded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.cost-badge-at-cost {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cost-badge-fixed {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.cost-badge-estimate {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.cost-badge-variable {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.cost-badge-conditional {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.cost-amount-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.cost-amount-range {
+  font-size: 10.5px;
+  color: #64748b;
+}
+
+.cost-amount-excluded {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #b91c1c;
+}
+
+.cost-amount-zero {
+  font-size: 12px;
+  font-weight: 600;
+  color: #15803d;
+}
+
+.cost-amount-variable {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.cost-totals-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+
+.cost-total-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cost-total-card-highlight {
+  background: #fff7ed;
+  border-color: #fdba74;
+}
+
+.cost-total-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #64748b;
+  letter-spacing: 0.03em;
+}
+
+.cost-total-val {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.cost-total-sub {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cost-warnings-box {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #92400e;
+}
+
+.cost-warnings-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  margin-bottom: 5px;
+}
+
+.cost-warnings-list {
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Provider Pricing Editor Modal Sections */
+.pricing-editor-section {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pricing-editor-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #0f172a;
+}
+
+.catalogue-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.catalogue-item-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.catalogue-item-card.added {
+  border-color: #fdba74;
+  background: #fff7ed;
+}
+
+.catalogue-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 12px;
+  color: #0f172a;
+}
+
+.catalogue-item-meta {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.btn-catalogue-add {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #0c1726;
+  color: #ffffff;
+  border: none;
+  border-radius: 5px;
+  padding: 4px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-catalogue-add:hover {
+  background: var(--orange-500);
+}
+
+.charge-editor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.charge-editor-row-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.charge-editor-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.charge-line-index {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--orange-500);
+  text-transform: uppercase;
+}
+
+.charge-editor-grid-4 {
+  display: grid;
+  grid-template-columns: 1.2fr 1.4fr 0.9fr 1.1fr;
+  gap: 10px;
+}
+
+.charge-editor-grid-5 {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr 0.9fr 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .cost-totals-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .catalogue-chips-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .charge-editor-grid-4,
+  .charge-editor-grid-5 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .cost-totals-grid,
+  .catalogue-chips-grid,
+  .charge-editor-grid-4,
+  .charge-editor-grid-5 {
+    grid-template-columns: 1fr;
+  }
+}

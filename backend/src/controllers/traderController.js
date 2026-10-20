@@ -4,9 +4,11 @@ const {
     parsePositiveInt,
     parseOptionalPositiveInt,
     parsePositiveNumber,
+    parseNonNegativeNumber,
     parseDateString,
     parseUnLocode,
 } = require("../middleware/validate");
+
 
 const getAvailableListings = asyncHandler(async (req, res) => {
     const origin = req.query.origin ? parseUnLocode(req.query.origin, "origin") : null;
@@ -203,6 +205,47 @@ const cancelBookingByTrader = asyncHandler(async (req, res) => {
     });
 });
 
+const getListingQuote = asyncHandler(async (req, res) => {
+    const source = { ...req.query, ...(req.body || {}) };
+    const listingId = parsePositiveInt(
+        req.params.listingId ?? source.listing_id ?? source.listingId,
+        "listing_id"
+    );
+    const cbm = parseNonNegativeNumber(
+        source.cbm ?? source.booked_cbm ?? source.required_cbm,
+        "cbm"
+    );
+    const weight = parseNonNegativeNumber(
+        source.weight ?? source.booked_weight ?? source.required_weight,
+        "weight"
+    );
+    const excessStorageDays =
+        source.excess_storage_days !== undefined &&
+        source.excess_storage_days !== null &&
+        source.excess_storage_days !== ""
+            ? parseNonNegativeNumber(source.excess_storage_days, "excess_storage_days")
+            : 0;
+    const asOfDate =
+        source.as_of_date !== undefined &&
+        source.as_of_date !== null &&
+        String(source.as_of_date).trim() !== ""
+            ? parseDateString(source.as_of_date, "as_of_date")
+            : null;
+
+    const quote = await traderService.getTraderQuote({
+        listingId,
+        cbm,
+        weight,
+        excessStorageDays,
+        asOfDate,
+    });
+
+    res.json({
+        success: true,
+        data: quote,
+    });
+});
+
 module.exports = {
     getAvailableListings,
     searchCapacity,
@@ -210,4 +253,5 @@ module.exports = {
     getTraderBookings,
     getBookingDetails,
     cancelBookingByTrader,
+    getListingQuote,
 };

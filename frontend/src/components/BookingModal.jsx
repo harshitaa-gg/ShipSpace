@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
+import { LiveQuoteBreakdown, SavedBookingSnapshotBreakdown } from './ItemisedCostBreakdown';
 
 import { isListingCutoffValid } from '../pages/ProviderDashboardPage';
 
@@ -140,38 +141,54 @@ export default function BookingModal({
     return weightUnit === 'kg' ? Number((val / 1000).toFixed(4)) : val;
   }, [weightInput, weightUnit]);
 
-  // Mirror PostgreSQL fn_calculate_booking_price:
-  // GREATEST(booked_cbm * price_per_cbm, booked_weight * price_per_tonne, minimum_charge)
-  const pricingBreakdown = useMemo(() => {
-    const cbm = parseFloat(bookedCbm);
-    const weight = bookedWeightTonnes;
-    const rateCbm = parseFloat(listing?.price_per_cbm || 0);
-    const rateTonne = parseFloat(listing?.price_per_tonne || 0);
-    const minCharge = parseFloat(listing?.minimum_charge || 0);
+  const [liveQuote, setLiveQuote] = useState(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState(null);
 
-    if (!Number.isFinite(cbm) || cbm <= 0 || !Number.isFinite(weight) || weight <= 0) {
-      return null;
+  const listingId = listing?.listing_id ?? listing?.id;
+
+  // Fetch authoritative itemised quote from backend quote engine (GET /api/trader/listings/:listingId/quote)
+  useEffect(() => {
+    const cbmVal = parseFloat(bookedCbm);
+    const weightVal = bookedWeightTonnes;
+
+    if (!listingId || !Number.isFinite(cbmVal) || cbmVal <= 0 || !Number.isFinite(weightVal) || weightVal <= 0) {
+      setLiveQuote(null);
+      setQuoteError(null);
+      setQuoteLoading(false);
+      return undefined;
     }
 
-    const volumeCharge = cbm * rateCbm;
-    const weightCharge = weight * rateTonne;
-    const finalPrice = Math.max(volumeCharge, weightCharge, minCharge);
+    let cancelled = false;
+    setQuoteLoading(true);
+    setQuoteError(null);
 
-    let appliedBasis = 'Volume (CBM) Rate';
-    if (finalPrice === minCharge && minCharge > volumeCharge && minCharge > weightCharge) {
-      appliedBasis = 'Minimum Charge Floor';
-    } else if (weightCharge > volumeCharge) {
-      appliedBasis = 'Weight (Tonne) Rate';
-    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.getListingQuote(listingId, {
+          cbm: Number(cbmVal.toFixed(2)),
+          weight: Number(weightVal.toFixed(2)),
+        });
+        if (!cancelled) {
+          setLiveQuote(res.data || null);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setQuoteError(err.message || 'Unable to fetch itemised quote from server.');
+          setLiveQuote(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setQuoteLoading(false);
+        }
+      }
+    }, 180);
 
-    return {
-      volumeCharge: volumeCharge.toFixed(2),
-      weightCharge: weightCharge.toFixed(2),
-      minCharge: minCharge.toFixed(2),
-      finalPrice: finalPrice.toFixed(2),
-      appliedBasis,
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
     };
-  }, [bookedCbm, bookedWeightTonnes, listing]);
+  }, [listingId, bookedCbm, bookedWeightTonnes]);
 
   if (!listing) return null;
 
@@ -274,7 +291,7 @@ export default function BookingModal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal-card booking-modal-card"
+        className="modal-card modal-card-lg booking-modal-card"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -306,7 +323,8 @@ export default function BookingModal({
               <div>
                 <h4>Booking #{createdBooking.booking_id} Confirmed!</h4>
                 <p>
-                  Your Less-than-Container Load space reservation has been locked and confirmed.
+                  Your Less-than-Container Load space reservation and financial price snapshot have
+                  been locked and confirmed.
                 </p>
               </div>
             </div>
@@ -343,13 +361,29 @@ export default function BookingModal({
                   {createdBooking.booked_weight} t ({Math.round(Number(createdBooking.booked_weight) * 1000).toLocaleString()} kg)
                 </span>
               </div>
-              <div className="receipt-item receipt-total-item">
-                <span className="receipt-label">Final Charged Total</span>
-                <span className="receipt-total-price">
+              <div className="receipt-item">
+                <span className="receipt-label">Base Freight (booking.total_price)</span>
+                <span className="receipt-value">
                   ${Number(createdBooking.total_price).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
                 </span>
               </div>
+              <div className="receipt-item">
+                <span className="receipt-label">
+                  {createdBooking.is_legacy_booking ? 'Final Charged Total' : 'Frozen All-In Total'}
+                </span>
+                <span className="receipt-total-price">
+                  $
+                  {Number(
+                    createdBooking.itemised_cost_summary?.total_all_in_cost ??
+                      createdBooking.total_price
+                  ).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+                  {createdBooking.charge_snapshots?.[0]?.currency || 'USD'}
+                </span>
+              </div>
             </div>
+
+            {/* Frozen Financial Breakdown returned by backend */}
+            <SavedBookingSnapshotBreakdown booking={createdBooking} />
 
             <div className="modal-footer">
               <button type="button" className="btn-secondary-outline" onClick={onClose}>
@@ -532,40 +566,12 @@ export default function BookingModal({
                 </div>
               </div>
 
-              {/* Real-time Database Price Preview */}
-              {pricingBreakdown && (
-                <div className="pricing-preview-box">
-                  <div className="pricing-preview-header">
-                    <Calculator size={15} className="text-orange" />
-                    <span>Live Tariff Calculation (W/M Standard)</span>
-                  </div>
-                  <div className="pricing-preview-rows">
-                    <div className="pricing-row">
-                      <span>
-                        Volume Charge ({bookedCbm} CBM &times; ${Number(listing.price_per_cbm).toFixed(2)})
-                      </span>
-                      <span>${pricingBreakdown.volumeCharge}</span>
-                    </div>
-                    <div className="pricing-row">
-                      <span>
-                        Weight Charge ({bookedWeightTonnes.toFixed(2)} t &times; $
-                        {Number(listing.price_per_tonne).toFixed(2)})
-                      </span>
-                      <span>${pricingBreakdown.weightCharge}</span>
-                    </div>
-                    <div className="pricing-row">
-                      <span>Provider Minimum Charge Floor</span>
-                      <span>${pricingBreakdown.minCharge}</span>
-                    </div>
-                    <div className="pricing-row pricing-row-total">
-                      <span>
-                        Estimated Total ({pricingBreakdown.appliedBasis})
-                      </span>
-                      <span className="pricing-total-amount">${pricingBreakdown.finalPrice} USD</span>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Authoritative Itemised Quote from Backend Quote API */}
+              <LiveQuoteBreakdown
+                quote={liveQuote}
+                loading={quoteLoading}
+                error={quoteError}
+              />
             </div>
 
             <div className="modal-footer">
