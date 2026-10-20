@@ -3,7 +3,10 @@ const { AppError } = require("../middleware/errorHandler");
 
 async function getPlatformSummary() {
     const { rows } = await pool.query(`SELECT * FROM v_admin_platform_summary`);
-    return rows[0] || {};
+    const summary = rows[0] || {};
+    const adminCountRes = await pool.query(`SELECT COUNT(*) AS count FROM admin`);
+    summary.total_admins_count = parseInt(adminCountRes.rows[0]?.count || 0, 10);
+    return summary;
 }
 
 async function getCapacityOverview({ origin_un_locode = null, destination_un_locode = null } = {}) {

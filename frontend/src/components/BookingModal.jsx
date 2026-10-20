@@ -16,6 +16,8 @@ import {
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
 
+import { isListingCutoffValid } from '../pages/ProviderDashboardPage';
+
 /**
  * Reusable modal to book LCL space on a selected capacity listing.
  * Calls POST /api/trader/bookings which executes shipspace.sp_create_booking in PostgreSQL.
@@ -62,15 +64,74 @@ export default function BookingModal({
     }
   }, [selectedTraderId]);
 
-  // Default cargo type to General Cargo (or first supported cargo type) if not provided
-  useEffect(() => {
-    if (!cargoTypeId && cargoTypes.length > 0) {
-      const general = cargoTypes.find((c) =>
-        c.name.toLowerCase().includes('general')
-      );
-      setCargoTypeId(String(general ? general.cargo_type_id : cargoTypes[0].cargo_type_id));
+  // Filter cargo types strictly to those permitted on this listing
+  const allowedCargoTypes = useMemo(() => {
+    if (!listing || !cargoTypes || cargoTypes.length === 0) return cargoTypes || [];
+
+    // Case 1: allowed_cargo_types is an array of objects
+    if (Array.isArray(listing.allowed_cargo_types) && listing.allowed_cargo_types.length > 0) {
+      const idSet = new Set(listing.allowed_cargo_types.map((c) => Number(c.id ?? c.cargo_type_id)));
+      const filtered = cargoTypes.filter((ct) => idSet.has(Number(ct.cargo_type_id ?? ct.id)));
+      if (filtered.length > 0) return filtered;
     }
-  }, [cargoTypes, cargoTypeId]);
+
+    // Case 2: permitted_cargo_types_array is an array of names
+    if (Array.isArray(listing.permitted_cargo_types_array) && listing.permitted_cargo_types_array.length > 0) {
+      const nameSet = new Set(
+        listing.permitted_cargo_types_array.map((s) => String(s).trim().toLowerCase())
+      );
+      const filtered = cargoTypes.filter((ct) =>
+        nameSet.has(String(ct.name).trim().toLowerCase())
+      );
+      if (filtered.length > 0) return filtered;
+    }
+
+    // Case 3: supported_cargo_types or permitted_cargo_types is a string
+    const typesStr = listing.supported_cargo_types || listing.permitted_cargo_types || '';
+    if (typesStr) {
+      const nameList = typesStr
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean);
+      if (nameList.length > 0) {
+        const filtered = cargoTypes.filter((ct) =>
+          nameList.some((allowed) => allowed === String(ct.name).trim().toLowerCase())
+        );
+        if (filtered.length > 0) return filtered;
+      }
+    }
+
+    // Case 4: matched_cargo_type_id from search response
+    if (listing.matched_cargo_type_id) {
+      const filtered = cargoTypes.filter(
+        (ct) => Number(ct.cargo_type_id ?? ct.id) === Number(listing.matched_cargo_type_id)
+      );
+      if (filtered.length > 0) return filtered;
+    }
+
+    return cargoTypes;
+  }, [cargoTypes, listing]);
+
+  // Keep selected cargoTypeId restricted to permitted classifications
+  useEffect(() => {
+    if (allowedCargoTypes.length === 0) return;
+
+    const isCurrentAllowed = allowedCargoTypes.some(
+      (ct) => String(ct.cargo_type_id ?? ct.id) === String(cargoTypeId)
+    );
+
+    if (!isCurrentAllowed) {
+      const isInitialAllowed =
+        initialCargoTypeId &&
+        allowedCargoTypes.some(
+          (ct) => String(ct.cargo_type_id ?? ct.id) === String(initialCargoTypeId)
+        );
+      const chosen = isInitialAllowed
+        ? initialCargoTypeId
+        : allowedCargoTypes[0].cargo_type_id ?? allowedCargoTypes[0].id;
+      setCargoTypeId(String(chosen));
+    }
+  }, [allowedCargoTypes, cargoTypeId, initialCargoTypeId]);
 
   // Convert user weight input into tonnes (matching DB booked_weight column)
   const bookedWeightTonnes = useMemo(() => {
@@ -116,6 +177,10 @@ export default function BookingModal({
 
   const availCbm = parseFloat(listing.available_cbm || 0);
   const availWeight = parseFloat(listing.available_weight || 0);
+  const cutoffValid = isListingCutoffValid(listing.cutoff_date);
+  const isExpired = listing.cutoff_date ? !cutoffValid : false;
+  const isFull = availCbm <= 0 || availWeight <= 0 || (listing.status && listing.status !== 'open');
+  const canBookListing = !isExpired && !isFull;
 
   const handleWeightUnitChange = (newUnit) => {
     if (newUnit === weightUnit) return;
@@ -142,15 +207,39 @@ export default function BookingModal({
       return;
     }
     if (!cargoTypeId) {
-      setErrorMsg('Please select a Cargo Type.');
+      setErrorMsg('Please select an allowed Cargo Classification.');
+      return;
+    }
+    if (isExpired) {
+      setErrorMsg('This capacity listing has passed its cargo cutoff date and can no longer accept bookings.');
+      return;
+    }
+    if (availCbm <= 0 || availWeight <= 0) {
+      setErrorMsg('This capacity listing has no remaining capacity available.');
+      return;
+    }
+    if (listing.status && listing.status !== 'open') {
+      setErrorMsg(`This capacity listing is currently "${listing.status}" and cannot accept bookings.`);
       return;
     }
     if (!Number.isFinite(cbmNum) || cbmNum <= 0) {
-      setErrorMsg('Booked Volume (CBM) must be a positive number.');
+      setErrorMsg('Booked Volume (CBM) must be greater than 0.');
       return;
     }
     if (!Number.isFinite(weightTonnesNum) || weightTonnesNum <= 0) {
-      setErrorMsg('Booked Weight must be a positive number.');
+      setErrorMsg('Booked Weight must be greater than 0.');
+      return;
+    }
+    if (cbmNum > availCbm) {
+      setErrorMsg(
+        `Requested volume (${cbmNum} CBM) exceeds remaining listing capacity (${availCbm.toFixed(2)} CBM).`
+      );
+      return;
+    }
+    if (weightTonnesNum > availWeight) {
+      setErrorMsg(
+        `Requested weight (${weightTonnesNum} t / ${Math.round(weightTonnesNum * 1000)} kg) exceeds remaining listing capacity (${availWeight.toFixed(2)} t / ${Math.round(availWeight * 1000)} kg).`
+      );
       return;
     }
 
@@ -160,7 +249,7 @@ export default function BookingModal({
       setSelectedTraderId(Number(traderId));
 
       const response = await api.createBooking({
-        listing_id: Number(listing.listing_id),
+        listing_id: Number(listing.listing_id ?? listing.id),
         trader_id: Number(traderId),
         cargo_type_id: Number(cargoTypeId),
         booked_cbm: Number(cbmNum.toFixed(2)),
@@ -304,6 +393,26 @@ export default function BookingModal({
                 </div>
               </div>
 
+              {isExpired && (
+                <div className="alert-banner alert-error" role="alert">
+                  <AlertTriangle size={18} />
+                  <div>
+                    <strong>Cutoff Date Passed</strong>
+                    <p>This capacity listing has passed its cargo cutoff date ({listing.cutoff_date}) and cannot accept new bookings.</p>
+                  </div>
+                </div>
+              )}
+
+              {!isExpired && isFull && (
+                <div className="alert-banner alert-error" role="alert">
+                  <AlertTriangle size={18} />
+                  <div>
+                    <strong>Listing Capacity Full</strong>
+                    <p>This capacity listing has no remaining volume or weight capacity available.</p>
+                  </div>
+                </div>
+              )}
+
               {errorMsg && (
                 <div className="alert-banner alert-error" role="alert">
                   <AlertTriangle size={18} />
@@ -345,10 +454,11 @@ export default function BookingModal({
                   value={cargoTypeId}
                   onChange={(e) => setCargoTypeId(e.target.value)}
                   required
+                  disabled={!canBookListing}
                 >
                   <option value="">Select cargo classification...</option>
-                  {cargoTypes.map((ct) => (
-                    <option key={ct.cargo_type_id} value={ct.cargo_type_id}>
+                  {allowedCargoTypes.map((ct) => (
+                    <option key={ct.cargo_type_id ?? ct.id} value={ct.cargo_type_id ?? ct.id}>
                       {ct.name} {ct.requires_special_handling ? '(Special Handling)' : ''}
                     </option>
                   ))}
@@ -470,10 +580,16 @@ export default function BookingModal({
               <button
                 type="submit"
                 className="btn-orange-primary"
-                disabled={submitting}
+                disabled={!canBookListing || submitting}
               >
-                {submitting ? 'Locking Capacity & Booking...' : 'Confirm LCL Booking'}
-                {!submitting && <ArrowRight size={15} />}
+                {isExpired
+                  ? 'Cutoff Date Passed'
+                  : isFull
+                  ? 'Capacity Full'
+                  : submitting
+                  ? 'Locking Capacity & Booking...'
+                  : 'Confirm LCL Booking'}
+                {canBookListing && !submitting && <ArrowRight size={15} />}
               </button>
             </div>
           </form>

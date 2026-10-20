@@ -278,21 +278,24 @@ export default function AdminOverviewPage() {
             <span className="kpi-label">Registered Accounts</span>
             <strong className="kpi-value">
               {summary
-                ? Number(summary.total_providers) +
-                  Number(summary.total_traders) +
-                  Number(summary.total_admins)
-                : 12}
+                ? Number(summary.total_providers || 0) +
+                  Number(summary.total_traders || 0) +
+                  Number(summary.total_admins || 0)
+                : allUsers.length > 0
+                ? allUsers.length
+                : '—'}
             </strong>
             <span className="kpi-sub">
-              {summary?.total_providers ?? 6} Providers &middot; {summary?.total_traders ?? 5}{' '}
-              Traders &middot; {summary?.total_admins ?? 1} Admin
+              {summary?.total_providers ?? (allUsers.filter((u) => u.role === 'provider').length || 0)} Providers &middot;{' '}
+              {summary?.total_traders ?? (allUsers.filter((u) => u.role === 'trader').length || 0)} Traders &middot;{' '}
+              {summary?.total_admins ?? (allUsers.filter((u) => u.role === 'admin').length || 0)} Admin
             </span>
           </div>
 
           <div className="kpi-card">
             <span className="kpi-label">Maritime Network</span>
             <strong className="kpi-value">
-              {summary?.total_ports ?? 12} Ports / {summary?.total_routes ?? 24} Routes
+              {summary ? `${summary.total_ports ?? 0} Ports / ${summary.total_routes ?? 0} Routes` : '—'}
             </strong>
             <span className="kpi-sub">
               Platform CBM Utilization: {summary?.platform_cbm_utilization_pct ?? '0.00'}%
@@ -301,10 +304,10 @@ export default function AdminOverviewPage() {
 
           <div className="kpi-card">
             <span className="kpi-label">Capacity Listings</span>
-            <strong className="kpi-value">{summary?.total_listings_count ?? 45}</strong>
+            <strong className="kpi-value">{summary?.total_listings_count ?? '—'}</strong>
             <span className="kpi-sub">
-              {summary?.open_listings ?? 45} Open &middot; {summary?.full_listings ?? 0} Full
-              &middot; {summary?.closed_listings ?? 0} Closed
+              {summary?.open_listings ?? 0} Open &middot; {summary?.full_listings ?? 0} Full &middot;{' '}
+              {summary?.closed_listings ?? 0} Closed
             </span>
           </div>
 

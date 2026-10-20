@@ -21,22 +21,29 @@ import {
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
 import BookingModal from '../components/BookingModal';
+import { isListingCutoffValid } from './ProviderDashboardPage';
 
 export default function SearchListingsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { ports, cargoTypes, activeTrader } = useIdentity();
 
   // Filter state initialized from URL query params
-  const [originPortId, setOriginPortId] = useState(searchParams.get('origin_port_id') || '');
-  const [destinationPortId, setDestinationPortId] = useState(
-    searchParams.get('destination_port_id') || ''
+  const [originPortId, setOriginPortId] = useState(
+    searchParams.get('origin_port_id') || searchParams.get('origin') || ''
   );
-  const [cargoTypeId, setCargoTypeId] = useState(searchParams.get('cargo_type_id') || '');
-  const [requiredCbm, setRequiredCbm] = useState(searchParams.get('required_cbm') || '');
+  const [destinationPortId, setDestinationPortId] = useState(
+    searchParams.get('destination_port_id') || searchParams.get('destination') || ''
+  );
+  const [cargoTypeId, setCargoTypeId] = useState(
+    searchParams.get('cargo_type_id') || searchParams.get('cargo') || ''
+  );
+  const [requiredCbm, setRequiredCbm] = useState(
+    searchParams.get('required_cbm') || searchParams.get('cbm') || ''
+  );
 
   // Support both weight_kg (from Hero card) and required_weight (tonnes)
   const initialWeightKgParam = searchParams.get('weight_kg');
-  const initialWeightTonnesParam = searchParams.get('required_weight');
+  const initialWeightTonnesParam = searchParams.get('required_weight') || searchParams.get('weight');
 
   const [weightUnit, setWeightUnit] = useState(initialWeightKgParam ? 'kg' : 'tonnes');
   const [weightInput, setWeightInput] = useState(() => {
@@ -44,7 +51,7 @@ export default function SearchListingsPage() {
     if (initialWeightTonnesParam) return initialWeightTonnesParam;
     return '';
   });
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'price');
+  const [sortBy, setSortBy] = useState(searchParams.get('sort') || searchParams.get('sort_by') || 'price');
 
   // Listings data & mode ('search' when using /api/trader/listings/search, 'catalog' when browsing all open listings)
   const [listings, setListings] = useState([]);
@@ -117,34 +124,72 @@ export default function SearchListingsPage() {
           const res = await api.getOpenListings({ limit: 100, offset: 0 });
           let rows = res.data || [];
 
+          // Only keep listings that are open, have positive available capacity, and cutoff has not passed
+          rows = rows.filter((r) => {
+            const isOpen = (r.status || 'open') === 'open';
+            const hasCbm = Number(r.available_cbm || 0) > 0;
+            const hasWeight = Number(r.available_weight || 0) > 0;
+            const notExpired = isListingCutoffValid(r.cutoff_date);
+            return isOpen && hasCbm && hasWeight && notExpired;
+          });
+
           if (origin) {
-            const origPort = ports.find((p) => Number(p.port_id) === Number(origin));
-            rows = rows.filter(
-              (r) =>
-                Number(r.origin_port_id) === Number(origin) ||
-                (origPort && r.origin_port_code === origPort.port_code)
+            const origPort = ports.find(
+              (p) =>
+                String(p.port_id ?? p.id) === String(origin) ||
+                (p.port_code && p.port_code.toUpperCase() === String(origin).toUpperCase()) ||
+                (p.un_locode && p.un_locode.toUpperCase() === String(origin).toUpperCase())
             );
+            const origCode = origPort
+              ? (origPort.port_code || origPort.un_locode)
+              : String(origin).length === 5
+              ? String(origin).toUpperCase()
+              : null;
+
+            rows = rows.filter((r) => {
+              if (r.origin_port_id && String(r.origin_port_id) === String(origin)) return true;
+              if (origCode && (r.origin_port_code === origCode || r.origin_un_locode === origCode)) return true;
+              return false;
+            });
           }
+
           if (destination) {
-            const destPort = ports.find((p) => Number(p.port_id) === Number(destination));
-            rows = rows.filter(
-              (r) =>
-                Number(r.destination_port_id) === Number(destination) ||
-                (destPort && r.destination_port_code === destPort.port_code)
+            const destPort = ports.find(
+              (p) =>
+                String(p.port_id ?? p.id) === String(destination) ||
+                (p.port_code && p.port_code.toUpperCase() === String(destination).toUpperCase()) ||
+                (p.un_locode && p.un_locode.toUpperCase() === String(destination).toUpperCase())
             );
+            const destCode = destPort
+              ? (destPort.port_code || destPort.un_locode)
+              : String(destination).length === 5
+              ? String(destination).toUpperCase()
+              : null;
+
+            rows = rows.filter((r) => {
+              if (r.destination_port_id && String(r.destination_port_id) === String(destination)) return true;
+              if (destCode && (r.destination_port_code === destCode || r.destination_un_locode === destCode)) return true;
+              return false;
+            });
           }
+
           if (cargo) {
             const selectedCargoObj = cargoTypes.find(
-              (c) => Number(c.cargo_type_id) === Number(cargo)
+              (c) => String(c.cargo_type_id ?? c.id) === String(cargo)
             );
             if (selectedCargoObj && selectedCargoObj.name) {
-              rows = rows.filter((r) =>
-                (r.supported_cargo_types || '')
-                  .toLowerCase()
-                  .includes(selectedCargoObj.name.toLowerCase())
-              );
+              const targetName = selectedCargoObj.name.toLowerCase();
+              rows = rows.filter((r) => {
+                if (Array.isArray(r.permitted_cargo_types_array)) {
+                  return r.permitted_cargo_types_array.some(
+                    (t) => t.toLowerCase() === targetName
+                  );
+                }
+                return (r.supported_cargo_types || '').toLowerCase().includes(targetName);
+              });
             }
           }
+
           if (Number(cbm) > 0) {
             rows = rows.filter((r) => Number(r.available_cbm) >= Number(cbm));
           }
@@ -194,15 +239,50 @@ export default function SearchListingsPage() {
       requiredCbm,
       requiredWeightTonnes,
       sortBy,
+      ports,
       cargoTypes,
     ]
   );
 
-  // Run initial query on mount
+  // Synchronize state with URL parameters (supports direct links, bookmarks, and HomePage featured lane clicks)
   useEffect(() => {
-    executeQuery();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const oId = searchParams.get('origin_port_id') || searchParams.get('origin') || '';
+    const dId = searchParams.get('destination_port_id') || searchParams.get('destination') || '';
+    const cId = searchParams.get('cargo_type_id') || searchParams.get('cargo') || '';
+    const cbm = searchParams.get('required_cbm') || searchParams.get('cbm') || '';
+    const sort = searchParams.get('sort') || searchParams.get('sort_by') || 'price';
+
+    const wKg = searchParams.get('weight_kg');
+    const wT = searchParams.get('required_weight') || searchParams.get('weight');
+
+    setOriginPortId(oId);
+    setDestinationPortId(dId);
+    setCargoTypeId(cId);
+    setRequiredCbm(cbm);
+    setSortBy(sort);
+
+    let weightTonnesVal = '';
+    if (wKg) {
+      setWeightUnit('kg');
+      setWeightInput(wKg);
+      weightTonnesVal = Number((parseFloat(wKg) / 1000).toFixed(4));
+    } else if (wT) {
+      setWeightUnit('tonnes');
+      setWeightInput(wT);
+      weightTonnesVal = parseFloat(wT);
+    } else {
+      setWeightInput('');
+    }
+
+    executeQuery({
+      origin: oId,
+      destination: dId,
+      cargo: cId,
+      cbm,
+      weightTonnes: weightTonnesVal,
+      sort,
+    });
+  }, [searchParams, ports.length]);
 
   const handleFormSubmit = (e) => {
     e.preventDefault();
@@ -243,33 +323,29 @@ export default function SearchListingsPage() {
     });
   };
 
-  // One-click preset for Mumbai (INNSA, ID 1) -> Rotterdam (NLRTM, ID 8), General Cargo (ID 1), 5 CBM, 2 Tonnes
+  // One-click preset for Mumbai (INNSA, ID 1) -> Dubai (AEJEA, ID 7), Standard Dry Merchandise (ID 1), 5 CBM, 2 Tonnes
   const handleFillSampleRoute = () => {
     const innsa = ports.find((p) => p.port_code === 'INNSA') || ports[0];
-    const nlrtm = ports.find((p) => p.port_code === 'NLRTM') || ports[1];
-    const genCargo =
-      cargoTypes.find((c) => c.name.toLowerCase().includes('general')) || cargoTypes[0];
+    const aejea = ports.find((p) => p.port_code === 'AEJEA') || ports[6];
+    const stdCargo =
+      cargoTypes.find(
+        (c) =>
+          c.name.toLowerCase().includes('dry') ||
+          c.name.toLowerCase().includes('merchandise')
+      ) || cargoTypes[0];
 
-    const oId = innsa ? String(innsa.port_id) : '1';
-    const dId = nlrtm ? String(nlrtm.port_id) : '8';
-    const cId = genCargo ? String(genCargo.cargo_type_id) : '1';
+    const oId = innsa ? String(innsa.port_id ?? innsa.id) : '1';
+    const dId = aejea ? String(aejea.port_id ?? aejea.id) : '7';
+    const cId = stdCargo ? String(stdCargo.cargo_type_id ?? stdCargo.id) : '1';
 
-    setOriginPortId(oId);
-    setDestinationPortId(dId);
-    setCargoTypeId(cId);
-    setRequiredCbm('5');
-    setWeightUnit('tonnes');
-    setWeightInput('2');
-    setSortBy('price');
-
-    executeQuery({
-      origin: oId,
-      destination: dId,
-      cargo: cId,
-      cbm: '5',
-      weightTonnes: 2,
-      sort: 'price',
-    });
+    const nextParams = new URLSearchParams();
+    nextParams.set('origin_port_id', oId);
+    nextParams.set('destination_port_id', dId);
+    nextParams.set('cargo_type_id', cId);
+    nextParams.set('required_cbm', '5');
+    nextParams.set('required_weight', '2');
+    nextParams.set('sort', 'price');
+    setSearchParams(nextParams);
   };
 
   return (
@@ -557,7 +633,7 @@ export default function SearchListingsPage() {
                 className="btn-secondary-outline"
                 onClick={handleFillSampleRoute}
               >
-                Load Sample Route (INNSA &rarr; NLRTM)
+                Load Sample Route (INNSA &rarr; AEJEA)
               </button>
             </div>
           </div>
@@ -567,6 +643,10 @@ export default function SearchListingsPage() {
               const totalCbm = parseFloat(item.total_cbm || item.available_cbm || 1);
               const availCbm = parseFloat(item.available_cbm || 0);
               const availWeight = parseFloat(item.available_weight || 0);
+              const isCutoffValid = isListingCutoffValid(item.cutoff_date);
+              const isExpired = item.cutoff_date ? !isCutoffValid : false;
+              const isFull = availCbm <= 0 || availWeight <= 0 || item.status !== 'open';
+              const canBook = !isExpired && !isFull;
               const cbmPercentRemaining = Math.min(
                 100,
                 Math.max(0, Math.round((availCbm / totalCbm) * 100))
@@ -583,8 +663,8 @@ export default function SearchListingsPage() {
                       </span>
                       <span className="listing-id-chip">Listing #{item.listing_id}</span>
                     </div>
-                    <span className={`status-badge status-${item.status || 'open'}`}>
-                      <CheckCircle2 size={12} /> {item.status || 'open'}
+                    <span className={`status-badge status-${isExpired ? 'closed' : item.status || 'open'}`}>
+                      <CheckCircle2 size={12} /> {isExpired ? 'Cutoff Passed' : item.status || 'open'}
                     </span>
                   </div>
 
@@ -709,11 +789,12 @@ export default function SearchListingsPage() {
 
                       <button
                         type="button"
-                        className="btn-orange-primary"
-                        onClick={() => setBookingListing(item)}
+                        className={canBook ? 'btn-orange-primary' : 'btn-secondary-outline'}
+                        disabled={!canBook}
+                        onClick={() => canBook && setBookingListing(item)}
                       >
-                        <span>Book Space</span>
-                        <ArrowRight size={15} />
+                        <span>{isExpired ? 'Cutoff Passed' : isFull ? 'Capacity Full' : 'Book Space'}</span>
+                        {canBook && <ArrowRight size={15} />}
                       </button>
                     </div>
                   </div>
