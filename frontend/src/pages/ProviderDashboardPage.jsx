@@ -19,10 +19,13 @@ import {
   Clock,
   Lock,
   SlidersHorizontal,
+  FileText,
 } from 'lucide-react';
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
 import ProviderPricingModal from '../components/ProviderPricingModal';
+import ProviderScheduleModal from '../components/ProviderScheduleModal';
+import BookingTimelineAndDocsModal from '../components/BookingTimelineAndDocsModal';
 
 export function isListingCutoffValid(cutoffValue, nowDate = new Date()) {
   if (!cutoffValue) return false;
@@ -100,6 +103,10 @@ export default function ProviderDashboardPage() {
   // Feature A: Itemised Pricing Editor Modal state
   const [pricingEditorListing, setPricingEditorListing] = useState(null);
   const [openPricingAfterCreate, setOpenPricingAfterCreate] = useState(false);
+
+  // Feature B: Schedule & CFS Policy Modal + Booking Timeline/Docs/Rollover Modal states
+  const [scheduleEditorListing, setScheduleEditorListing] = useState(null);
+  const [activeBookingModal, setActiveBookingModal] = useState(null); // { booking, initialTab }
 
   // Create Listing Form State (includes cutoff_date <= departure_date < arrival_date)
   const [routeId, setRouteId] = useState('');
@@ -678,6 +685,14 @@ export default function ProviderDashboardPage() {
                           <SlidersHorizontal size={13} />
                           <span>Itemised Pricing</span>
                         </button>
+                        <button
+                          type="button"
+                          className="btn-secondary-sm"
+                          onClick={() => setScheduleEditorListing(item)}
+                        >
+                          <Clock size={13} />
+                          <span>Schedule &amp; CFS</span>
+                        </button>
                         {canReopen && (
                           <button
                             type="button"
@@ -807,17 +822,49 @@ export default function ProviderDashboardPage() {
                           </strong>
                         </div>
 
-                        {b.booking_status === 'confirmed' && (
+                        <div className="booking-btn-group">
                           <button
                             type="button"
-                            className="btn-danger-sm"
-                            disabled={cancellingBookingId === b.booking_id}
-                            onClick={() => setCancelBookingTarget(b)}
+                            className="btn-ghost-sm"
+                            onClick={() =>
+                              setActiveBookingModal({ booking: b, initialTab: 'timeline' })
+                            }
                           >
-                            <XCircle size={14} />
-                            <span>Cancel &amp; Restore</span>
+                            <Clock size={13} />
+                            <span>Timeline</span>
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            className="btn-ghost-sm"
+                            onClick={() =>
+                              setActiveBookingModal({ booking: b, initialTab: 'documents' })
+                            }
+                          >
+                            <FileText size={13} />
+                            <span>Docs Review</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="btn-ghost-sm"
+                            onClick={() =>
+                              setActiveBookingModal({ booking: b, initialTab: 'rollover' })
+                            }
+                          >
+                            <RefreshCw size={13} />
+                            <span>Rollover</span>
+                          </button>
+                          {b.booking_status === 'confirmed' && (
+                            <button
+                              type="button"
+                              className="btn-danger-sm"
+                              disabled={cancellingBookingId === b.booking_id}
+                              onClick={() => setCancelBookingTarget(b)}
+                            >
+                              <XCircle size={14} />
+                              <span>Cancel &amp; Restore</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </article>
@@ -854,7 +901,7 @@ export default function ProviderDashboardPage() {
                 }}
               >
                 <Sparkles size={14} />
-                <span>Fill Sample Voyage Values</span>
+                <span>Load Illustrative Sample Values</span>
               </button>
             </div>
 
@@ -1051,10 +1098,9 @@ export default function ProviderDashboardPage() {
                     onChange={(e) => setOpenPricingAfterCreate(e.target.checked)}
                   />
                   <div>
-                    <strong>Configure Itemised All-In Pricing &amp; Charge Catalogue Next</strong>
+                    <strong>Open Itemised Pricing Editor after publishing</strong>
                     <span>
-                      Automatically open the Feature A Itemised Pricing Editor right after
-                      publishing this listing to configure origin, ocean, and destination surcharges.
+                      Configure origin, ocean, and destination charges right after this listing is created.
                     </span>
                   </div>
                 </label>
@@ -1089,6 +1135,34 @@ export default function ProviderDashboardPage() {
           providerId={Number(selectedProviderId)}
           onClose={() => setPricingEditorListing(null)}
           onSaved={() => {
+            loadProviderWorkspace();
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {/* Feature B: Provider Schedule, CFS & Rollover Policy Modal */}
+      {scheduleEditorListing && (
+        <ProviderScheduleModal
+          listing={scheduleEditorListing}
+          providerId={Number(selectedProviderId)}
+          onClose={() => setScheduleEditorListing(null)}
+          onSaved={() => {
+            loadProviderWorkspace();
+            refreshCatalog();
+          }}
+        />
+      )}
+
+      {/* Feature B: Provider Booking Timeline, Document Review & Rollover Modal */}
+      {activeBookingModal && (
+        <BookingTimelineAndDocsModal
+          booking={activeBookingModal.booking}
+          role="provider"
+          actorUserId={Number(selectedProviderId)}
+          initialTab={activeBookingModal.initialTab}
+          onClose={() => setActiveBookingModal(null)}
+          onUpdated={() => {
             loadProviderWorkspace();
             refreshCatalog();
           }}

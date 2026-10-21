@@ -65,6 +65,15 @@ export default function BookingModal({
     }
   }, [selectedTraderId]);
 
+  // Prevent background page scroll while modal is open
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
   // Filter cargo types strictly to those permitted on this listing
   const allowedCargoTypes = useMemo(() => {
     if (!listing || !cargoTypes || cargoTypes.length === 0) return cargoTypes || [];
@@ -303,7 +312,7 @@ export default function BookingModal({
               LISTING #{listing.listing_id} · {listing.provider_company || listing.provider_name}
             </span>
             <h3 id="booking-modal-title" className="modal-title">
-              {createdBooking ? 'Booking Confirmed in Database' : 'Reserve LCL Container Capacity'}
+              {createdBooking ? 'Booking Confirmed' : 'Reserve LCL Container Capacity'}
             </h3>
           </div>
           <button
@@ -317,73 +326,74 @@ export default function BookingModal({
         </div>
 
         {createdBooking ? (
-          <div className="modal-body booking-success-body">
-            <div className="booking-success-banner">
-              <CheckCircle2 size={28} className="text-success-icon" />
-              <div>
-                <h4>Booking #{createdBooking.booking_id} Confirmed!</h4>
-                <p>
-                  Your Less-than-Container Load space reservation and financial price snapshot have
-                  been locked and confirmed.
-                </p>
+          <div className="modal-form">
+            <div className="modal-body booking-success-body">
+              <div className="booking-success-banner">
+                <CheckCircle2 size={28} className="text-success-icon" />
+                <div>
+                  <h4>Booking #{createdBooking.booking_id} Confirmed!</h4>
+                  <p>
+                    Your LCL space reservation and price breakdown have been saved.
+                  </p>
+                </div>
               </div>
-            </div>
 
-            <div className="booking-receipt-grid">
-              <div className="receipt-item">
-                <span className="receipt-label">Booking Reference</span>
-                <span className="receipt-value">#{createdBooking.booking_id}</span>
+              <div className="booking-receipt-grid">
+                <div className="receipt-item">
+                  <span className="receipt-label">Booking Reference</span>
+                  <span className="receipt-value">#{createdBooking.booking_id}</span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">Status</span>
+                  <span className="status-badge status-confirmed">
+                    {createdBooking.booking_status || 'confirmed'}
+                  </span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">Route</span>
+                  <span className="receipt-value">
+                    {createdBooking.origin_port_code || listing.origin_port_code} &rarr;{' '}
+                    {createdBooking.destination_port_code || listing.destination_port_code}
+                  </span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">Cargo Type</span>
+                  <span className="receipt-value">{createdBooking.cargo_type_name || 'Selected Cargo'}</span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">Reserved Volume</span>
+                  <span className="receipt-value">{createdBooking.booked_cbm} CBM</span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">Reserved Weight</span>
+                  <span className="receipt-value">
+                    {createdBooking.booked_weight} t ({Math.round(Number(createdBooking.booked_weight) * 1000).toLocaleString()} kg)
+                  </span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">Base Freight</span>
+                  <span className="receipt-value">
+                    ${Number(createdBooking.total_price).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
+                  </span>
+                </div>
+                <div className="receipt-item">
+                  <span className="receipt-label">
+                    {createdBooking.is_legacy_booking ? 'Base Freight Charged' : 'Saved Total Charged'}
+                  </span>
+                  <span className="receipt-total-price">
+                    $
+                    {Number(
+                      createdBooking.itemised_cost_summary?.total_all_in_cost ??
+                        createdBooking.total_price
+                    ).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
+                    {createdBooking.charge_snapshots?.[0]?.currency || 'USD'}
+                  </span>
+                </div>
               </div>
-              <div className="receipt-item">
-                <span className="receipt-label">Status</span>
-                <span className="status-badge status-confirmed">
-                  {createdBooking.booking_status || 'confirmed'}
-                </span>
-              </div>
-              <div className="receipt-item">
-                <span className="receipt-label">Route</span>
-                <span className="receipt-value">
-                  {createdBooking.origin_port_code || listing.origin_port_code} &rarr;{' '}
-                  {createdBooking.destination_port_code || listing.destination_port_code}
-                </span>
-              </div>
-              <div className="receipt-item">
-                <span className="receipt-label">Cargo Type</span>
-                <span className="receipt-value">{createdBooking.cargo_type_name || 'Selected Cargo'}</span>
-              </div>
-              <div className="receipt-item">
-                <span className="receipt-label">Reserved Volume</span>
-                <span className="receipt-value">{createdBooking.booked_cbm} CBM</span>
-              </div>
-              <div className="receipt-item">
-                <span className="receipt-label">Reserved Weight</span>
-                <span className="receipt-value">
-                  {createdBooking.booked_weight} t ({Math.round(Number(createdBooking.booked_weight) * 1000).toLocaleString()} kg)
-                </span>
-              </div>
-              <div className="receipt-item">
-                <span className="receipt-label">Base Freight (booking.total_price)</span>
-                <span className="receipt-value">
-                  ${Number(createdBooking.total_price).toLocaleString('en-US', { minimumFractionDigits: 2 })} USD
-                </span>
-              </div>
-              <div className="receipt-item">
-                <span className="receipt-label">
-                  {createdBooking.is_legacy_booking ? 'Final Charged Total' : 'Frozen All-In Total'}
-                </span>
-                <span className="receipt-total-price">
-                  $
-                  {Number(
-                    createdBooking.itemised_cost_summary?.total_all_in_cost ??
-                      createdBooking.total_price
-                  ).toLocaleString('en-US', { minimumFractionDigits: 2 })}{' '}
-                  {createdBooking.charge_snapshots?.[0]?.currency || 'USD'}
-                </span>
-              </div>
-            </div>
 
-            {/* Frozen Financial Breakdown returned by backend */}
-            <SavedBookingSnapshotBreakdown booking={createdBooking} />
+              {/* Saved Financial Breakdown returned by backend */}
+              <SavedBookingSnapshotBreakdown booking={createdBooking} />
+            </div>
 
             <div className="modal-footer">
               <button type="button" className="btn-secondary-outline" onClick={onClose}>
@@ -395,7 +405,7 @@ export default function BookingModal({
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSubmit}>
+          <form className="modal-form" onSubmit={handleSubmit}>
             <div className="modal-body">
               {/* Route & Schedule Summary Banner */}
               <div className="booking-route-summary">

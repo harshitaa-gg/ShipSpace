@@ -10,6 +10,9 @@ import {
   BookOpen,
   Sparkles,
   Save,
+  Info,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { api } from '../api/client';
 
@@ -20,26 +23,26 @@ const STAGE_OPTIONS = [
 ];
 
 const TREATMENT_OPTIONS = [
-  { value: 'charged', label: 'Charged (Billable)' },
-  { value: 'included', label: 'Included (0.00)' },
-  { value: 'not_charged', label: 'Not Charged / Waived (0.00)' },
-  { value: 'excluded', label: 'Excluded (Payable Separately)' },
+  { value: 'charged', label: 'Charged (Added to quote)' },
+  { value: 'included', label: 'Included in base rate (0.00)' },
+  { value: 'not_charged', label: 'Waived / Not charged (0.00)' },
+  { value: 'excluded', label: 'Excluded (Paid separately)' },
 ];
 
 const BASIS_OPTIONS = [
   { value: 'per_cbm', label: 'Per CBM' },
   { value: 'per_tonne', label: 'Per Tonne' },
-  { value: 'per_shipment', label: 'Per Shipment (Flat)' },
+  { value: 'per_shipment', label: 'Per Shipment (Flat fee)' },
   { value: 'percentage', label: '% of Ocean Freight' },
   { value: 'per_cbm_per_day', label: 'Per CBM / Day (Storage)' },
-  { value: 'at_cost', label: 'At Cost (Actual Pass-Through)' },
+  { value: 'at_cost', label: 'At Actual Cost (Variable pass-through)' },
 ];
 
 const CERTAINTY_OPTIONS = [
-  { value: 'fixed', label: 'Fixed' },
-  { value: 'estimate', label: 'Estimate' },
-  { value: 'variable', label: 'Variable' },
-  { value: 'conditional', label: 'Conditional' },
+  { value: 'fixed', label: 'Fixed (Confirmed rate)' },
+  { value: 'estimate', label: 'Estimated (Approximate)' },
+  { value: 'variable', label: 'Variable (Subject to change)' },
+  { value: 'conditional', label: 'Conditional (If applicable)' },
 ];
 
 const PAYER_OPTIONS = [
@@ -48,9 +51,9 @@ const PAYER_OPTIONS = [
 ];
 
 const TIMING_OPTIONS = [
-  { value: 'prepaid', label: 'Prepaid' },
-  { value: 'collect', label: 'Collect' },
-  { value: 'upon_delivery', label: 'Upon Delivery' },
+  { value: 'prepaid', label: 'Prepaid (Before departure)' },
+  { value: 'collect', label: 'Collect (At destination)' },
+  { value: 'upon_delivery', label: 'Upon Cargo Delivery' },
   { value: 'at_terminal', label: 'At Terminal' },
 ];
 
@@ -108,6 +111,15 @@ export default function ProviderPricingModal({
 
   const [pricingRule, setPricingRule] = useState(() => normalizeRuleForForm(null));
   const [chargeItems, setChargeItems] = useState([]);
+
+  // Lock background page scroll while modal is open
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
 
   const loadConfiguration = useCallback(async () => {
     if (!listingId) return;
@@ -229,7 +241,7 @@ export default function ProviderPricingModal({
         payer: 'shipper',
         payee: 'Origin CFS Terminal',
         payment_timing: 'prepaid',
-        explanatory_note: 'Origin warehouse receiving and container stuffing',
+        explanatory_note: 'Illustrative origin warehouse receiving and container stuffing fee',
       },
       {
         charge_type_code: 'documentation_fee',
@@ -243,7 +255,7 @@ export default function ProviderPricingModal({
         payer: 'shipper',
         payee: 'Carrier / Forwarder',
         payment_timing: 'prepaid',
-        explanatory_note: 'House B/L issuance and export filing',
+        explanatory_note: 'Illustrative B/L issuance and export filing fee',
       },
       {
         charge_type_code: 'export_customs',
@@ -257,7 +269,7 @@ export default function ProviderPricingModal({
         payer: 'shipper',
         payee: '',
         payment_timing: 'prepaid',
-        explanatory_note: 'Included in origin package for standard HS codes',
+        explanatory_note: 'Included in base rate (no extra charge)',
       },
       {
         charge_type_code: 'destination_thc',
@@ -271,7 +283,7 @@ export default function ProviderPricingModal({
         payer: 'consignee',
         payee: 'Destination Port Terminal',
         payment_timing: 'collect',
-        explanatory_note: 'Payable at destination prior to cargo release',
+        explanatory_note: 'Estimated destination handling payable prior to cargo release',
       },
       {
         charge_type_code: 'import_duties_taxes',
@@ -285,10 +297,13 @@ export default function ProviderPricingModal({
         payer: 'consignee',
         payee: 'Destination Customs Authority',
         payment_timing: 'upon_delivery',
-        explanatory_note: 'Assessed directly by destination customs authority',
+        explanatory_note: 'Assessed directly by destination customs authority (not in total)',
       },
     ]);
-    setStatusMessage(null);
+    setStatusMessage({
+      type: 'info',
+      text: 'Loaded illustrative example charges into the editor. These sample figures are for demonstration only and are not saved until you click "Save Pricing".',
+    });
   };
 
   const handleUpdateLine = (index, field, value) => {
@@ -297,7 +312,6 @@ export default function ProviderPricingModal({
         if (i !== index) return item;
         const next = { ...item, [field]: value };
 
-        // If provider selects a standard charge type from dropdown, auto-populate defaults if charge_name is empty
         if (field === 'charge_type_code' && value) {
           const matchedCat = catalogue.find((c) => c.code === value);
           if (matchedCat) {
@@ -310,7 +324,6 @@ export default function ProviderPricingModal({
           }
         }
 
-        // Enforce backend rule: non-charged treatments or at_cost basis must have rate = 0
         if (next.treatment !== 'charged' || next.basis === 'at_cost') {
           next.rate = '0';
         }
@@ -327,7 +340,6 @@ export default function ProviderPricingModal({
     e.preventDefault();
     setStatusMessage(null);
 
-    // Client-side pre-validation for clear user feedback
     for (let i = 0; i < chargeItems.length; i += 1) {
       const it = chargeItems[i];
       if (!String(it.charge_name || '').trim()) {
@@ -395,7 +407,7 @@ export default function ProviderPricingModal({
         text:
           savedData.charge_items?.length > 0
             ? `Saved ${savedData.charge_items.length} itemised charge line(s) and pricing rules for Listing #${listingId}.`
-            : `Saved pricing rules for Listing #${listingId} (0 charge items — Legacy Base-Rate mode).`,
+            : `Saved pricing rules for Listing #${listingId} (Base-freight only mode).`,
       });
 
       if (onSaved) {
@@ -427,10 +439,10 @@ export default function ProviderPricingModal({
         <div className="modal-header">
           <div>
             <span className="modal-eyebrow">
-              FEATURE A · ITEMISED ALL-IN PRICING EDITOR · LISTING #{listingId}
+              ITEMISED PRICING EDITOR &middot; LISTING #{listingId}
             </span>
             <h3 id="provider-pricing-modal-title" className="modal-title">
-              Configure Pricing Rules &amp; Charge Catalogue ({listing.origin_port_code} &rarr;{' '}
+              Configure Pricing &amp; Additional Charges ({listing.origin_port_code} &rarr;{' '}
               {listing.destination_port_code})
             </h3>
           </div>
@@ -445,39 +457,31 @@ export default function ProviderPricingModal({
           </button>
         </div>
 
-        <form onSubmit={handleSave}>
+        <form className="modal-form" onSubmit={handleSave}>
           <div className="modal-body">
             {/* Base Freight Reference Strip */}
             <div className="booking-route-summary">
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  flexWrap: 'wrap',
-                  gap: '10px',
-                }}
-              >
+              <div className="pricing-modal-top-bar">
                 <div className="booking-route-meta">
                   <span>
-                    Base CBM Rate: <strong>${Number(listing.price_per_cbm).toFixed(2)}/CBM</strong>
+                    Base Volume Rate: <strong>${Number(listing.price_per_cbm).toFixed(2)}/CBM</strong>
                   </span>
                   <span>
-                    Base Tonne Rate: <strong>${Number(listing.price_per_tonne).toFixed(2)}/t</strong>
+                    Base Weight Rate: <strong>${Number(listing.price_per_tonne).toFixed(2)}/t</strong>
                   </span>
                   <span>
-                    Min Charge Floor: <strong>${Number(listing.minimum_charge).toFixed(2)}</strong>
+                    Minimum Charge: <strong>${Number(listing.minimum_charge).toFixed(2)}</strong>
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <div className="pricing-modal-top-actions">
                   <span
                     className={`cost-mode-pill ${
                       isLegacyMode ? 'cost-mode-legacy' : 'cost-mode-itemised'
                     }`}
                   >
                     {isLegacyMode
-                      ? 'Currently: Legacy Base-Rate Only'
-                      : `Active: ${chargeItems.length} Itemised Line(s)`}
+                      ? 'Saved: Base-Rate Only'
+                      : `Saved: ${chargeItems.length} Charge Line(s)`}
                   </span>
                   <button
                     type="button"
@@ -495,22 +499,28 @@ export default function ProviderPricingModal({
                     disabled={loading || saving}
                   >
                     <Sparkles size={13} />
-                    <span>Fill Sample All-In Charges</span>
+                    <span>Load Illustrative Example</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Save / Validation Status Banner */}
+            {/* Save / Validation / Info Banner */}
             {statusMessage && (
               <div
                 className={`alert-banner ${
-                  statusMessage.type === 'success' ? 'alert-success' : 'alert-error'
+                  statusMessage.type === 'success'
+                    ? 'alert-success'
+                    : statusMessage.type === 'info'
+                    ? 'alert-info'
+                    : 'alert-error'
                 }`}
                 role="alert"
               >
                 {statusMessage.type === 'success' ? (
                   <CheckCircle2 size={18} />
+                ) : statusMessage.type === 'info' ? (
+                  <Info size={18} />
                 ) : (
                   <AlertTriangle size={18} />
                 )}
@@ -535,10 +545,10 @@ export default function ProviderPricingModal({
                 <div className="pricing-editor-section">
                   <div className="pricing-editor-section-header">
                     <SlidersHorizontal size={15} className="text-orange" />
-                    <h4>1. Listing W/M &amp; Storage Pricing Rules</h4>
+                    <h4>1. Calculation &amp; Storage Rules</h4>
                   </div>
 
-                  <div className="form-row-3col">
+                  <div className="pricing-rules-grid">
                     <div className="form-group">
                       <label className="form-label">Listing Currency</label>
                       <select
@@ -567,7 +577,7 @@ export default function ProviderPricingModal({
                     </div>
 
                     <div className="form-group">
-                      <label className="form-label">W/M Ratio (kg per 1 CBM)</label>
+                      <label className="form-label">Weight-to-Volume Ratio (kg/CBM)</label>
                       <input
                         type="number"
                         step="1"
@@ -577,11 +587,9 @@ export default function ProviderPricingModal({
                         onChange={(e) => handleRuleChange('weight_volume_ratio', e.target.value)}
                       />
                     </div>
-                  </div>
 
-                  <div className="form-row-3col" style={{ marginTop: '10px' }}>
                     <div className="form-group">
-                      <label className="form-label">CBM Rounding Decimals (0–4)</label>
+                      <label className="form-label">Volume Rounding</label>
                       <select
                         className="form-select"
                         value={pricingRule.cbm_rounding_decimal}
@@ -627,20 +635,18 @@ export default function ProviderPricingModal({
 
                 {/* SECTION 2: Standard Charge Catalogue Picker */}
                 <div className="pricing-editor-section">
-                  <div
-                    className="pricing-editor-section-header"
-                    style={{ justifyContent: 'space-between' }}
-                  >
+                  <div className="pricing-editor-section-header pricing-section-header-Wrap">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
                       <BookOpen size={15} className="text-orange" />
-                      <h4>2. Standard LCL Charge Catalogue ({catalogue.length} Standard Types)</h4>
+                      <h4>2. Standard LCL Charge Catalogue ({catalogue.length} Types)</h4>
                     </div>
                     <button
                       type="button"
                       className="btn-secondary-sm"
                       onClick={() => setShowCatalogue((prev) => !prev)}
                     >
-                      {showCatalogue ? 'Hide Catalogue' : 'Show Catalogue'}
+                      <span>{showCatalogue ? 'Hide Catalogue' : 'Show Catalogue'}</span>
+                      {showCatalogue ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                     </button>
                   </div>
 
@@ -660,8 +666,8 @@ export default function ProviderPricingModal({
                               </span>
                             </div>
                             <span className="catalogue-item-meta">
-                              Default: {cat.default_basis?.replace(/_/g, ' ')} &middot;{' '}
-                              {cat.default_payer} &middot; {cat.default_payment_timing}
+                              {cat.default_basis?.replace(/_/g, ' ')} &middot; {cat.default_payer}{' '}
+                              &middot; {cat.default_payment_timing}
                             </span>
                             <button
                               type="button"
@@ -669,7 +675,7 @@ export default function ProviderPricingModal({
                               onClick={() => handleAddFromCatalogue(cat)}
                             >
                               <PlusCircle size={12} />
-                              <span>{alreadyAdded ? 'Add Another' : 'Add to Listing'}</span>
+                              <span>{alreadyAdded ? 'Add Another' : 'Add Charge'}</span>
                             </button>
                           </div>
                         );
@@ -678,23 +684,20 @@ export default function ProviderPricingModal({
                   )}
                 </div>
 
-                {/* SECTION 3: Charge Items Editor */}
+                {/* SECTION 3: Configured Charge Lines */}
                 <div className="pricing-editor-section">
-                  <div
-                    className="pricing-editor-section-header"
-                    style={{ justifyContent: 'space-between' }}
-                  >
+                  <div className="pricing-editor-section-header pricing-section-header-Wrap">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '7px' }}>
-                      <h4>3. Configured Listing Charge Lines ({chargeItems.length})</h4>
+                      <h4>3. Configured Charge Lines ({chargeItems.length})</h4>
                     </div>
-                    <div style={{ display: 'flex', gap: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                       {chargeItems.length > 0 && (
                         <button
                           type="button"
                           className="btn-secondary-sm"
                           onClick={() => setChargeItems([])}
                         >
-                          Clear All Lines
+                          Clear All
                         </button>
                       )}
                       <button
@@ -703,20 +706,33 @@ export default function ProviderPricingModal({
                         onClick={handleAddCustomLine}
                       >
                         <PlusCircle size={13} />
-                        <span>Add Charge Line</span>
+                        <span>Add Custom Charge</span>
                       </button>
                     </div>
+                  </div>
+
+                  {/* Brief Treatment Explanation */}
+                  <div className="treatment-guide-bar">
+                    <span>
+                      <strong>Charged:</strong> Added to quote total.
+                    </span>
+                    <span>
+                      <strong>Included / Waived:</strong> 0.00 (no extra cost).
+                    </span>
+                    <span>
+                      <strong>Excluded / At Actual Cost:</strong> Disclosed to trader, not added to
+                      fixed total.
+                    </span>
                   </div>
 
                   {chargeItems.length === 0 ? (
                     <div className="cost-legacy-notice">
                       <div>
-                        <strong>No itemised charges configured (Legacy Base-Freight Mode).</strong>{' '}
-                        Click any item in the Standard Charge Catalogue above or click{' '}
-                        <strong>&ldquo;Add Charge Line&rdquo;</strong> to configure origin, ocean, or
-                        destination charges.Note: Base Ocean Freight from the listing&apos;s CBM /
-                        tonne / minimum rates is automatically included in quotes unless you add an
-                        explicit <code>ocean_freight</code> line.
+                        <strong>No additional charges configured (Base-Freight Only).</strong>{' '}
+                        Select a charge from the Standard Catalogue above or click{' '}
+                        <strong>&ldquo;Add Custom Charge&rdquo;</strong> to itemise origin, ocean,
+                        or destination fees. Base ocean freight is automatically calculated from the
+                        listing&apos;s CBM, tonne, and minimum rates.
                       </div>
                     </div>
                   ) : (
@@ -727,7 +743,17 @@ export default function ProviderPricingModal({
                         return (
                           <div key={idx} className="charge-editor-row-card">
                             <div className="charge-editor-row-top">
-                              <span className="charge-line-index">Line #{idx + 1}</span>
+                              <div className="charge-editor-row-title">
+                                <span className="charge-line-index">Charge #{idx + 1}</span>
+                                <span className={`cost-stage-tag stage-${item.stage || 'origin'}`}>
+                                  {item.stage}
+                                </span>
+                                {item.charge_name && (
+                                  <strong className="charge-line-preview-name">
+                                    {item.charge_name}
+                                  </strong>
+                                )}
+                              </div>
                               <button
                                 type="button"
                                 className="btn-danger-sm"
@@ -739,7 +765,8 @@ export default function ProviderPricingModal({
                               </button>
                             </div>
 
-                            <div className="charge-editor-grid-4">
+                            {/* Row 1: Type, Name, Stage */}
+                            <div className="charge-editor-grid-3">
                               <div className="form-group">
                                 <label className="form-label">Standard Type</label>
                                 <select
@@ -786,9 +813,12 @@ export default function ProviderPricingModal({
                                   ))}
                                 </select>
                               </div>
+                            </div>
 
+                            {/* Row 2: Treatment, Basis, Rate */}
+                            <div className="charge-editor-grid-3" style={{ marginTop: '10px' }}>
                               <div className="form-group">
-                                <label className="form-label">Treatment</label>
+                                <label className="form-label">Charge Treatment</label>
                                 <select
                                   className="form-select"
                                   value={item.treatment}
@@ -803,9 +833,7 @@ export default function ProviderPricingModal({
                                   ))}
                                 </select>
                               </div>
-                            </div>
 
-                            <div className="charge-editor-grid-5" style={{ marginTop: '8px' }}>
                               <div className="form-group">
                                 <label className="form-label">Calculation Basis</label>
                                 <select
@@ -824,6 +852,7 @@ export default function ProviderPricingModal({
                               <div className="form-group">
                                 <label className="form-label">
                                   Rate ({pricingRule.currency})
+                                  {rateLocked ? ' — Auto 0.00' : ''}
                                 </label>
                                 <input
                                   type="number"
@@ -835,9 +864,12 @@ export default function ProviderPricingModal({
                                   disabled={rateLocked}
                                 />
                               </div>
+                            </div>
 
+                            {/* Row 3: Certainty, Payer, Payment Timing */}
+                            <div className="charge-editor-grid-3" style={{ marginTop: '10px' }}>
                               <div className="form-group">
-                                <label className="form-label">Certainty</label>
+                                <label className="form-label">Price Certainty</label>
                                 <select
                                   className="form-select"
                                   value={item.certainty}
@@ -854,7 +886,7 @@ export default function ProviderPricingModal({
                               </div>
 
                               <div className="form-group">
-                                <label className="form-label">Payer</label>
+                                <label className="form-label">Paid By (Payer)</label>
                                 <select
                                   className="form-select"
                                   value={item.payer}
@@ -886,7 +918,8 @@ export default function ProviderPricingModal({
                               </div>
                             </div>
 
-                            <div className="form-row-2col" style={{ marginTop: '8px' }}>
+                            {/* Row 4: Optional Payee & Explanatory Note */}
+                            <div className="charge-editor-grid-2" style={{ marginTop: '10px' }}>
                               <div className="form-group">
                                 <label className="form-label">Payee (Optional)</label>
                                 <input
@@ -898,7 +931,7 @@ export default function ProviderPricingModal({
                                 />
                               </div>
                               <div className="form-group">
-                                <label className="form-label">Explanatory Note (Optional)</label>
+                                <label className="form-label">Note for Trader (Optional)</label>
                                 <input
                                   type="text"
                                   className="form-input"
@@ -906,7 +939,7 @@ export default function ProviderPricingModal({
                                   onChange={(e) =>
                                     handleUpdateLine(idx, 'explanatory_note', e.target.value)
                                   }
-                                  placeholder="e.g. Applies per billable W/M CBM"
+                                  placeholder="e.g. Applies per billable CBM"
                                 />
                               </div>
                             </div>
@@ -935,9 +968,7 @@ export default function ProviderPricingModal({
               disabled={loading || saving}
             >
               <Save size={15} />
-              <span>
-                {saving ? 'Saving Pricing Configuration...' : 'Save Itemised Pricing'}
-              </span>
+              <span>{saving ? 'Saving Pricing...' : 'Save Pricing'}</span>
             </button>
           </div>
         </form>

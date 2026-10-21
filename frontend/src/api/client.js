@@ -363,4 +363,66 @@ export const api = {
     }),
   getListingQuote: (listingId, params) =>
     request(`/trader/listings/${listingId}/quote${buildQuery(params)}`),
+
+  // Feature B: Schedules, Timelines, Document Checklist, Rollover & Notifications
+  getStandardMilestoneTypes: () => request('/reference/milestone-types'),
+  getListingSchedule: (listingId, params) =>
+    request(`/listings/${listingId}/schedule${buildQuery(params)}`),
+  saveListingSchedule: (providerId, listingId, body) =>
+    request(`/provider/${providerId}/listings/${listingId}/schedule`, {
+      method: 'PUT',
+      headers: { 'x-provider-id': String(providerId) },
+      body: JSON.stringify(body),
+    }),
+  getBookingTimeline: (bookingId, params) =>
+    request(`/bookings/${bookingId}/timeline${buildQuery(params)}`),
+  updateBookingMilestone: (bookingId, milestoneId, actorUserId, body) =>
+    request(`/bookings/${bookingId}/milestones/${milestoneId}`, {
+      method: 'PATCH',
+      headers: { 'x-user-id': String(actorUserId) },
+      body: JSON.stringify({ actor_user_id: Number(actorUserId), ...body }),
+    }),
+  initBookingDocuments: (bookingId) =>
+    request(`/bookings/${bookingId}/documents/init`, {
+      method: 'POST',
+    }),
+  uploadBookingDocument: (bookingId, checklistItemId, uploadedByUserId, body) =>
+    request(`/bookings/${bookingId}/documents/${checklistItemId}/upload`, {
+      method: 'POST',
+      headers: { 'x-user-id': String(uploadedByUserId) },
+      body: JSON.stringify({ uploaded_by_user_id: Number(uploadedByUserId), ...body }),
+    }),
+  updateBookingDocumentChecklistItem: (bookingId, checklistItemId, actorUserId, body) =>
+    request(`/bookings/${bookingId}/documents/${checklistItemId}`, {
+      method: 'PATCH',
+      headers: { 'x-user-id': String(actorUserId) },
+      body: JSON.stringify({ actor_user_id: Number(actorUserId), ...body }),
+    }),
+  getBookingDocumentDownloadUrl: (bookingId, uploadId, userId) =>
+    `${API_BASE_URL}/bookings/${bookingId}/documents/uploads/${uploadId}/download?user_id=${encodeURIComponent(userId)}`,
+  recordBookingRolloverDecision: (providerId, bookingId, body) =>
+    request(`/provider/${providerId}/bookings/${bookingId}/rollover`, {
+      method: 'POST',
+      headers: { 'x-provider-id': String(providerId) },
+      body: JSON.stringify({ provider_id: Number(providerId), ...body }),
+    }),
+  processReminders: (body = {}) =>
+    request('/reminders/process', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  getNotifications: (userId, params = {}) =>
+    request(`/notifications${buildQuery({ user_id: userId, ...params })}`),
+  markNotificationRead: (notificationId, userId) =>
+    request(`/notifications/${notificationId}/read`, {
+      method: 'PATCH',
+      headers: { 'x-user-id': String(userId) },
+      body: JSON.stringify({ actor_user_id: Number(userId) }),
+    }),
+  markAllNotificationsRead: (userId) =>
+    request('/notifications/read-all', {
+      method: 'POST',
+      headers: { 'x-user-id': String(userId) },
+      body: JSON.stringify({ actor_user_id: Number(userId) }),
+    }),
 };

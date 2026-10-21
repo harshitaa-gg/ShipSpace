@@ -233,6 +233,95 @@ const upsertListingPricing = asyncHandler(async (req, res) => {
     });
 });
 
+const getListingSchedule = asyncHandler(async (req, res) => {
+    const listingId = parsePositiveInt(req.params.listingId, "listingId");
+    const providerId = parseOptionalPositiveInt(
+        req.params.providerId ?? req.headers["x-provider-id"] ?? req.query.provider_id,
+        "provider_id"
+    );
+
+    const data = await providerService.getListingSchedule(listingId, { providerId });
+
+    res.json({
+        success: true,
+        data,
+    });
+});
+
+const upsertListingSchedule = asyncHandler(async (req, res) => {
+    const listingId = parsePositiveInt(req.params.listingId, "listingId");
+    const providerId = resolveVerifiedProviderId(req);
+
+    const body = req.body || {};
+    const schedulePolicy =
+        body.schedule_policy ??
+        body.schedulePolicy ??
+        (body.doc_cutoff_at || body.etd_at ? body : undefined);
+    const milestoneTemplates =
+        body.milestone_templates ??
+        body.milestoneTemplates ??
+        body.milestones ??
+        undefined;
+    const reason = body.reason ?? body.date_change_reason ?? schedulePolicy?.reason ?? null;
+
+    const data = await providerService.upsertListingSchedule({
+        listingId,
+        providerId,
+        schedulePolicy,
+        milestoneTemplates,
+        reason,
+    });
+
+    res.json({
+        success: true,
+        message: "Listing schedule policy and milestone templates saved successfully",
+        data,
+    });
+});
+
+const recordBookingRolloverDecision = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    const providerId = parsePositiveInt(
+        req.params.providerId ??
+            req.headers["x-provider-id"] ??
+            req.headers["x-user-id"] ??
+            req.body?.provider_id ??
+            req.query?.provider_id,
+        "provider_id"
+    );
+    const body = req.body || {};
+    const missedMilestoneId = parseOptionalPositiveInt(
+        body.missed_milestone_id ?? body.missedMilestoneId,
+        "missed_milestone_id"
+    );
+    const rolloverTargetListingId = parseOptionalPositiveInt(
+        body.rollover_target_listing_id ?? body.rolloverTargetListingId,
+        "rollover_target_listing_id"
+    );
+
+    const data = await providerService.recordBookingRolloverDecision({
+        bookingId,
+        providerId,
+        missedMilestoneId,
+        operatorDecision: body.operator_decision ?? body.operatorDecision ?? body.decision,
+        rolloverFeeAmount: body.rollover_fee_amount ?? body.rolloverFeeAmount ?? 0,
+        currency: body.currency ?? "USD",
+        newDocCutoffAt: body.new_doc_cutoff_at ?? body.newDocCutoffAt ?? null,
+        newCfsGateInAt: body.new_cfs_gate_in_at ?? body.newCfsGateInAt ?? null,
+        newEtdAt: body.new_etd_at ?? body.newEtdAt ?? null,
+        newEtaAt: body.new_eta_at ?? body.newEtaAt ?? null,
+        rolloverTargetListingId,
+        decisionReason: body.decision_reason ?? body.decisionReason ?? body.reason,
+        outcomeNotes: body.outcome_notes ?? body.outcomeNotes ?? null,
+    });
+
+    res.status(201).json({
+        success: true,
+        message: "Booking rollover / missed cut-off decision recorded",
+        data,
+    });
+});
+
 module.exports = {
     createListing,
     getProviderListings,
@@ -242,4 +331,7 @@ module.exports = {
     cancelBookingByProvider,
     getListingPricing,
     upsertListingPricing,
+    getListingSchedule,
+    upsertListingSchedule,
+    recordBookingRolloverDecision,
 };

@@ -153,12 +153,14 @@ async function searchMatchingCapacity({
 }
 
 const pricingEngine = require("./pricingEngine");
+const timelineService = require("./timelineService");
 
 /**
  * Creates a booking transactionally using PostgreSQL stored procedure sp_create_booking,
  * preserving SELECT ... FOR UPDATE row locking, capacity checks, price snapshot calculation,
  * and booking_status_history audit logging inside the database engine, then freezes
- * itemised charge snapshots into booking_charge_snapshot within the same transaction.
+ * itemised charge snapshots into booking_charge_snapshot and Feature B timeline/checklist/reminder
+ * snapshots within the same transaction.
  */
 async function createBooking({
     trader_id,
@@ -167,6 +169,7 @@ async function createBooking({
     booked_cbm,
     booked_weight,
     transformSnapshots = null,
+    asOfTimestamp = null,
 }) {
     return pool.withTransaction(async (client) => {
         // Verify trader account exists (Rule R8)
@@ -194,7 +197,18 @@ async function createBooking({
             transformSnapshots,
         });
 
-        // 3. Read back the created booking, updated listing capacity, and frozen financial snapshot
+        // 3. Initialize Feature B booking milestone snapshots, reminders & export document checklist
+        const timelineSnapshot = await timelineService.initializeBookingFeatureBSnapshots(
+            client,
+            {
+                bookingId,
+                listingId: listing_id,
+                traderId: trader_id,
+                asOfTimestamp,
+            }
+        );
+
+        // 4. Read back the created booking, updated listing capacity, and frozen financial snapshot
         const bookingRes = await client.query(
             `SELECT * FROM v_trader_bookings WHERE booking_id = $1`,
             [bookingId]
@@ -215,6 +229,10 @@ async function createBooking({
             is_legacy_booking: financialSnapshot.is_legacy_booking,
             itemised_cost_summary: financialSnapshot.summary,
             charge_snapshots: financialSnapshot.snapshots,
+            has_timeline_snapshot: timelineSnapshot.has_timeline_snapshot,
+            milestones: timelineSnapshot.milestones,
+            document_checklist: timelineSnapshot.document_checklist,
+            reminders: timelineSnapshot.reminders,
         };
 
         return {
@@ -223,6 +241,10 @@ async function createBooking({
             is_legacy_booking: financialSnapshot.is_legacy_booking,
             itemised_cost_summary: financialSnapshot.summary,
             charge_snapshots: financialSnapshot.snapshots,
+            has_timeline_snapshot: timelineSnapshot.has_timeline_snapshot,
+            milestones: timelineSnapshot.milestones,
+            document_checklist: timelineSnapshot.document_checklist,
+            reminders: timelineSnapshot.reminders,
         };
     });
 }
@@ -275,7 +297,7 @@ async function getBookingDetails(bookingId, { trader_id = null, provider_id = nu
         );
     }
 
-    const [historyRes, financialSnapshot] = await Promise.all([
+    const [historyRes, financialSnapshot, timeline] = await Promise.all([
         pool.query(
             `SELECT
                 h.id AS history_id,
@@ -295,6 +317,10 @@ async function getBookingDetails(bookingId, { trader_id = null, provider_id = nu
             [bookingId]
         ),
         pricingEngine.getBookingFinancialSnapshot(bookingId),
+        timelineService.getBookingTimeline(bookingId, {
+            traderId: trader_id,
+            providerId: provider_id,
+        }),
     ]);
 
     return {
@@ -303,6 +329,14 @@ async function getBookingDetails(bookingId, { trader_id = null, provider_id = nu
         itemised_cost_summary: financialSnapshot.summary,
         charge_snapshots: financialSnapshot.snapshots,
         status_history: historyRes.rows,
+        has_timeline_snapshot: timeline.has_timeline_snapshot,
+        schedule_policy: timeline.schedule_policy,
+        milestones: timeline.milestones,
+        date_change_history: timeline.date_change_history,
+        reminders: timeline.reminders,
+        document_checklist: timeline.document_checklist,
+        rollover_events: timeline.rollover_events,
+        timeline,
     };
 }
 
@@ -398,4 +432,14 @@ module.exports = {
     getBookingDetails,
     cancelBookingByTrader,
     getTraderQuote,
+    getBookingTimeline: timelineService.getBookingTimeline,
+    updateBookingMilestone: timelineService.updateBookingMilestone,
+    ensureBookingDocumentChecklist: timelineService.ensureBookingDocumentChecklist,
+    uploadBookingDocument: timelineService.uploadBookingDocument,
+    updateBookingDocumentChecklistItem: timelineService.updateBookingDocumentChecklistItem,
+    getBookingDocumentDownload: timelineService.getBookingDocumentDownload,
+    processDueReminders: timelineService.processDueReminders,
+    getUserNotifications: timelineService.getUserNotifications,
+    markNotificationRead: timelineService.markNotificationRead,
+    markAllNotificationsRead: timelineService.markAllNotificationsRead,
 };

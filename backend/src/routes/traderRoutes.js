@@ -31,4 +31,18 @@ router.post("/listings/:listingId/quote", traderController.getListingQuote);
 router.get("/quote", traderController.getListingQuote);
 router.post("/quote", traderController.getListingQuote);
 
+// Feature B: Booking Timeline, Milestones, Documents & Notifications
+router.get("/bookings/:bookingId/timeline", traderController.getBookingTimeline);
+router.patch("/bookings/:bookingId/milestones/:milestoneId", traderController.updateBookingMilestone);
+router.post("/bookings/:bookingId/documents/init", traderController.initBookingDocuments);
+router.post("/bookings/:bookingId/documents/:checklistItemId/upload", traderController.uploadBookingDocument);
+router.patch("/bookings/:bookingId/documents/:checklistItemId", traderController.updateBookingDocumentChecklistItem);
+router.patch("/bookings/:bookingId/documents/:checklistItemId/review", traderController.updateBookingDocumentChecklistItem);
+router.get("/bookings/:bookingId/documents/uploads/:uploadId/download", traderController.downloadBookingDocument);
+
+router.get("/notifications", traderController.getNotifications);
+router.get("/:traderId/notifications", traderController.getNotifications);
+router.patch("/notifications/:notificationId/read", traderController.markNotificationRead);
+router.post("/notifications/read-all", traderController.markAllNotificationsRead);
+
 module.exports = router;

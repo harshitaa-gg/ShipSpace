@@ -453,7 +453,7 @@ export default function SearchListingsPage() {
                 onClick={handleFillSampleRoute}
               >
                 <Sparkles size={14} />
-                <span>Sample: INNSA &rarr; NLRTM (5 CBM / 2t)</span>
+                <span>Illustrative Sample: INNSA &rarr; AEJEA (5 CBM / 2t)</span>
               </button>
               <button
                 type="button"
@@ -674,17 +674,12 @@ export default function SearchListingsPage() {
         ) : (
           <div className="listings-grid">
             {listings.map((item) => {
-              const totalCbm = parseFloat(item.total_cbm || item.available_cbm || 1);
               const availCbm = parseFloat(item.available_cbm || 0);
               const availWeight = parseFloat(item.available_weight || 0);
               const isCutoffValid = isListingCutoffValid(item.cutoff_date);
               const isExpired = item.cutoff_date ? !isCutoffValid : false;
               const isFull = availCbm <= 0 || availWeight <= 0 || item.status !== 'open';
               const canBook = !isExpired && !isFull;
-              const cbmPercentRemaining = Math.min(
-                100,
-                Math.max(0, Math.round((availCbm / totalCbm) * 100))
-              );
 
               return (
                 <article key={item.listing_id} className="listing-card">
@@ -702,39 +697,26 @@ export default function SearchListingsPage() {
                     </span>
                   </div>
 
-                  {/* Route Corridor */}
+                  {/* Origin & Destination Route */}
                   <div className="listing-route-box">
                     <div className="listing-port-col">
                       <span className="port-code-badge">{item.origin_port_code}</span>
                       <strong className="port-city-name">{item.origin_port_name}</strong>
-                      <span className="port-country-sub">{item.origin_country}</span>
                     </div>
 
                     <div className="listing-transit-connector">
-                      <span className="transit-days-label">
-                        {item.typical_transit_days
-                          ? `${item.typical_transit_days} Days Transit`
-                          : 'Direct LCL'}
-                      </span>
                       <div className="transit-line">
-                        <span className="transit-dot" />
-                        <ArrowRight size={15} className="transit-arrow" />
+                        <ArrowRight size={16} className="transit-arrow" />
                       </div>
-                      {item.distance_nm && (
-                        <span className="transit-nm-label">
-                          {Number(item.distance_nm).toLocaleString()} NM
-                        </span>
-                      )}
                     </div>
 
                     <div className="listing-port-col listing-port-col-right">
                       <span className="port-code-badge">{item.destination_port_code}</span>
                       <strong className="port-city-name">{item.destination_port_name}</strong>
-                      <span className="port-country-sub">{item.destination_country}</span>
                     </div>
                   </div>
 
-                  {/* Schedule & Capacity Gauges */}
+                  {/* Schedule & Available Capacity */}
                   <div className="listing-metrics-row">
                     <div className="listing-schedule-col">
                       <div className="schedule-pair">
@@ -753,31 +735,25 @@ export default function SearchListingsPage() {
                       </div>
                     </div>
 
-                    <div className="listing-capacity-col">
-                      <div className="capacity-bar-header">
-                        <span>
-                          Available Volume: <strong>{availCbm.toFixed(2)} CBM</strong>
-                          {item.total_cbm ? ` / ${Number(item.total_cbm).toFixed(0)} CBM` : ''}
-                        </span>
-                        <span className="capacity-pct">{cbmPercentRemaining}% free</span>
+                    <div className="listing-schedule-col">
+                      <div className="schedule-pair">
+                        <Box size={14} className="text-orange" />
+                        <div>
+                          <span className="metric-caption">Available Volume</span>
+                          <strong>{availCbm.toFixed(2)} CBM</strong>
+                        </div>
                       </div>
-                      <div className="capacity-progress-track">
-                        <div
-                          className="capacity-progress-fill"
-                          style={{ width: `${cbmPercentRemaining}%` }}
-                        />
-                      </div>
-                      <div className="capacity-weight-sub">
-                        <Scale size={13} /> Available Weight:{' '}
-                        <strong>
-                          {availWeight.toFixed(2)} t ({Math.round(availWeight * 1000).toLocaleString()}{' '}
-                          kg)
-                        </strong>
+                      <div className="schedule-pair">
+                        <Scale size={14} className="text-orange" />
+                        <div>
+                          <span className="metric-caption">Available Weight</span>
+                          <strong>{availWeight.toFixed(2)} t</strong>
+                        </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* Supported Cargo Tags */}
+                  {/* Existing Cargo Categories */}
                   {item.supported_cargo_types && (
                     <div className="listing-cargo-tags">
                       {item.supported_cargo_types.split(',').map((tag, i) => (
@@ -788,39 +764,25 @@ export default function SearchListingsPage() {
                     </div>
                   )}
 
-                  {/* Bottom Tariff & Book Action */}
+                  {/* Footer: Starting Price & Actions */}
                   <div className="listing-card-footer">
-                    <div className="listing-rates-group">
-                      <div className="rate-pill">
-                        <span className="rate-label">Volume Rate</span>
-                        <strong className="rate-val">
-                          ${Number(item.price_per_cbm).toFixed(2)}/CBM
-                        </strong>
-                      </div>
-                      <div className="rate-pill">
-                        <span className="rate-label">Weight Rate</span>
-                        <strong className="rate-val">
-                          ${Number(item.price_per_tonne).toFixed(2)}/t
-                        </strong>
-                      </div>
-                      <div className="rate-pill">
-                        <span className="rate-label">Min Charge</span>
-                        <strong className="rate-val">
-                          ${Number(item.minimum_charge).toFixed(2)}
-                        </strong>
-                      </div>
+                    <div className="listing-starting-price-block">
+                      <span className="est-price-label">
+                        {requiredCbm && requiredWeightTonnes
+                          ? 'Estimated Base Freight'
+                          : 'Starting Price'}
+                      </span>
+                      <strong className="est-price-value">
+                        ${Number(item.estimated_total_price || item.minimum_charge).toFixed(2)}
+                      </strong>
+                      <span className="listing-rate-hint">
+                        ${Number(item.price_per_cbm).toFixed(2)}/CBM &middot; $
+                        {Number(item.price_per_tonne).toFixed(2)}/t &middot; Min $
+                        {Number(item.minimum_charge).toFixed(2)}
+                      </span>
                     </div>
 
                     <div className="listing-cta-group">
-                      <div className="estimated-price-block">
-                        <span className="est-price-label">
-                          {requiredCbm && requiredWeightTonnes ? 'Estimated Base' : 'Starting From'}
-                        </span>
-                        <strong className="est-price-value">
-                          ${Number(item.estimated_total_price || item.minimum_charge).toFixed(2)}
-                        </strong>
-                      </div>
-
                       <button
                         type="button"
                         className="btn-secondary-sm"
@@ -840,14 +802,16 @@ export default function SearchListingsPage() {
                         disabled={!canBook}
                         onClick={() => canBook && setBookingListing(item)}
                       >
-                        <span>{isExpired ? 'Cutoff Passed' : isFull ? 'Capacity Full' : 'Book Space'}</span>
+                        <span>
+                          {isExpired ? 'Cutoff Passed' : isFull ? 'Capacity Full' : 'Book Space'}
+                        </span>
                         {canBook && <ArrowRight size={15} />}
                       </button>
                     </div>
                   </div>
 
                   {expandedQuoteListingId === item.listing_id && (
-                    <div style={{ marginTop: '12px' }}>
+                    <div style={{ marginTop: '10px' }}>
                       <LiveQuoteBreakdown
                         quote={cardQuoteData}
                         loading={cardQuoteLoading}

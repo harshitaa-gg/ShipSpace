@@ -1,12 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Calculator,
   AlertTriangle,
-  CheckCircle2,
   Info,
   Lock,
-  Layers,
   ShieldAlert,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 
 const STAGE_LABELS = {
@@ -20,6 +20,7 @@ const BASIS_LABELS = {
   per_tonne: 'Per Tonne',
   per_shipment: 'Per Shipment',
   percentage: '% of Ocean Freight',
+  percent_ocean_freight: '% of Ocean Freight',
   per_cbm_per_day: 'Per CBM / Day',
   at_cost: 'At Actual Cost',
 };
@@ -45,24 +46,27 @@ function renderTreatmentBadge(line) {
     return <span className="cost-badge cost-badge-included">Included</span>;
   }
   if (t === 'not_charged') {
-    return <span className="cost-badge cost-badge-not-charged">Not Charged</span>;
+    return <span className="cost-badge cost-badge-not-charged">Waived</span>;
   }
   if (t === 'excluded') {
     return <span className="cost-badge cost-badge-excluded">Excluded</span>;
   }
   if (line.basis === 'at_cost') {
-    return <span className="cost-badge cost-badge-at-cost">At Cost</span>;
+    return <span className="cost-badge cost-badge-at-cost">At Actual Cost</span>;
   }
   return <span className="cost-badge cost-badge-charged">Charged</span>;
 }
 
-function renderCertaintyBadge(certainty) {
-  const c = certainty || 'fixed';
+function renderCertaintyBadge(line) {
+  if (line.treatment === 'included' || line.treatment === 'not_charged') {
+    return null;
+  }
+  const c = line.certainty || 'fixed';
   if (c === 'fixed') {
     return <span className="cost-badge cost-badge-fixed">Fixed</span>;
   }
   if (c === 'estimate') {
-    return <span className="cost-badge cost-badge-estimate">Estimate</span>;
+    return <span className="cost-badge cost-badge-estimate">Estimated</span>;
   }
   if (c === 'variable') {
     return <span className="cost-badge cost-badge-variable">Variable</span>;
@@ -78,18 +82,29 @@ function renderLineAmount(line, defaultCurrency = 'USD') {
   if (line.treatment === 'excluded') {
     return (
       <span className="cost-amount-excluded" title="Excluded from quote total; payable separately">
-        Excluded (Not in Total)
+        Not in total (Paid separately)
       </span>
     );
   }
   if (line.treatment === 'included') {
-    return <span className="cost-amount-zero">Included (0.00 {cur})</span>;
+    return <span className="cost-amount-zero">Included (No extra charge)</span>;
   }
   if (line.treatment === 'not_charged') {
     return <span className="cost-amount-zero">Waived (0.00 {cur})</span>;
   }
   if (line.basis === 'at_cost') {
-    return <span className="cost-amount-variable">Billed at Actual Cost</span>;
+    return (
+      <span className="cost-amount-variable">
+        Variable (Billed at actual cost)
+      </span>
+    );
+  }
+  if (line.certainty === 'conditional' && Number(line.calculated_amount || 0) === 0) {
+    return (
+      <span className="cost-amount-variable">
+        0.00 {cur} (Applies only if exceeded)
+      </span>
+    );
   }
 
   const amt = Number(line.calculated_amount || 0);
@@ -117,39 +132,59 @@ function renderLineAmount(line, defaultCurrency = 'USD') {
 function formatBasisDetail(line, defaultCurrency = 'USD') {
   const cur = line.currency || defaultCurrency;
   const basisLabel = BASIS_LABELS[line.basis] || line.basis;
-  if (line.explanatory_note) {
-    return `${basisLabel} · ${line.explanatory_note}`;
+
+  if (line.treatment === 'included') {
+    return 'Included in base freight';
   }
-  if (line.calculation_note) {
-    return `${basisLabel} · ${line.calculation_note}`;
+  if (line.treatment === 'not_charged') {
+    return 'Not charged on this listing';
   }
-  if (line.treatment !== 'charged' || line.basis === 'at_cost') {
-    return basisLabel;
+  if (line.treatment === 'excluded') {
+    return 'Excluded — settled directly with authority/third party';
   }
+  if (line.basis === 'at_cost') {
+    return 'Pass-through at actual cost (not in fixed total)';
+  }
+
   const rate = Number(line.rate || 0).toFixed(2);
   const qty = Number(line.chargeable_quantity || 0).toFixed(2);
+
   if (line.basis === 'per_shipment') {
     return `${basisLabel} (${rate} ${cur} flat)`;
   }
-  if (line.basis === 'percentage') {
-    return `${rate}% of ${qty} ${cur}`;
+  if (line.basis === 'percentage' || line.basis === 'percent_ocean_freight') {
+    return `${rate}% of ocean freight (${qty} ${cur})`;
+  }
+  if (line.basis === 'per_cbm_per_day') {
+    return `${rate} ${cur} / CBM / day`;
   }
   return `${basisLabel} (${qty} × ${rate} ${cur})`;
+}
+
+function isBaseFreightLine(line, index) {
+  if (line.source === 'capacity_listing_base') return true;
+  if (line.charge_type_code === 'ocean_freight') return true;
+  if (index === 0 && line.stage === 'ocean' && /ocean\s*freight/i.test(line.charge_name || '')) {
+    return true;
+  }
+  return false;
 }
 
 /**
  * Displays the live itemised quote returned by GET /api/trader/listings/:listingId/quote.
  * Uses backend response exclusively without recreating pricing logic in React.
  */
-export function LiveQuoteBreakdown({ quote, loading = false, error = null, compact = false }) {
+export function LiveQuoteBreakdown({ quote, loading = false, error = null }) {
+  const [showBreakdown, setShowBreakdown] = useState(false);
+
   if (loading) {
     return (
       <div className="pricing-preview-box">
         <div className="pricing-preview-header">
           <Calculator size={15} className="text-orange" />
-          <span>Calculating Itemised All-In Quote from Server...</span>
+          <span>Calculating quote from server...</span>
         </div>
-        <p className="text-muted-sm">Evaluating listing pricing rules and charge catalogue...</p>
+        <p className="text-muted-sm">Loading base freight and configured charge items...</p>
       </div>
     );
   }
@@ -159,7 +194,7 @@ export function LiveQuoteBreakdown({ quote, loading = false, error = null, compa
       <div className="alert-banner alert-error" role="alert">
         <AlertTriangle size={16} />
         <div>
-          <strong>Quote Calculation Error</strong>
+          <strong>Unable to Calculate Quote</strong>
           <p>{error}</p>
         </div>
       </div>
@@ -175,6 +210,7 @@ export function LiveQuoteBreakdown({ quote, loading = false, error = null, compa
   const quantities = quote.quantities || {};
   const pricingRule = quote.pricing_rule || null;
   const warnings = Array.isArray(quote.warnings) ? quote.warnings : [];
+
   const rangeMin = totals.estimated_all_in_range?.min;
   const rangeMax = totals.estimated_all_in_range?.max;
   const hasRange =
@@ -182,183 +218,308 @@ export function LiveQuoteBreakdown({ quote, loading = false, error = null, compa
     rangeMax !== undefined &&
     Number(rangeMin) !== Number(rangeMax);
 
+  // Classify lines using backend flags/fields (no formula recalculation)
+  const additionalLines = isLegacy
+    ? []
+    : lines.filter((line, idx) => !isBaseFreightLine(line, idx));
+
+  const billableAdditionalLines = additionalLines.filter(
+    (l) => l.treatment === 'charged' && l.basis !== 'at_cost'
+  );
+  const includedLines = additionalLines.filter(
+    (l) => l.treatment === 'included' || l.treatment === 'not_charged'
+  );
+  const nonIncludedVariableOrExcludedLines = additionalLines.filter(
+    (l) =>
+      l.treatment === 'excluded' ||
+      l.basis === 'at_cost' ||
+      (l.certainty === 'conditional' && Number(l.calculated_amount || 0) === 0)
+  );
+
+  // Determine whether all additional charges are uncalculable (at_cost / excluded only)
+  const hasUncalculableCharges = additionalLines.some(
+    (l) => l.treatment === 'excluded' || l.basis === 'at_cost'
+  );
+  const onlyUncalculableAdditional =
+    !isLegacy &&
+    additionalLines.length > 0 &&
+    billableAdditionalLines.length === 0 &&
+    includedLines.length === 0 &&
+    hasUncalculableCharges;
+
+  let additionalSummaryLabel = 'Not configured';
+  let additionalSummarySub = 'Origin & destination charges not itemised';
+  if (!isLegacy) {
+    if (additionalLines.length === 0) {
+      additionalSummaryLabel = 'None configured';
+      additionalSummarySub = 'Base freight only';
+    } else {
+      const parts = [];
+      if (billableAdditionalLines.length > 0) {
+        parts.push(
+          `${billableAdditionalLines.length} billable`
+        );
+      }
+      if (includedLines.length > 0) {
+        parts.push(`${includedLines.length} included/waived`);
+      }
+      if (hasUncalculableCharges) {
+        const excCount = additionalLines.filter(
+          (l) => l.treatment === 'excluded' || l.basis === 'at_cost'
+        ).length;
+        parts.push(`${excCount} separate/at-cost`);
+      }
+      additionalSummaryLabel = `${additionalLines.length} Charge Item${
+        additionalLines.length === 1 ? '' : 's'
+      }`;
+      additionalSummarySub = parts.join(' · ') || 'See breakdown below';
+    }
+  }
+
   return (
     <div className="itemised-cost-panel">
       <div className="itemised-cost-header">
         <div className="itemised-cost-title-wrap">
           <Calculator size={16} className="text-orange" />
-          <strong>
-            {isLegacy
-              ? 'Base Freight Tariff Quote (Legacy Listing)'
-              : 'Itemised All-In Freight Quote'}
-          </strong>
+          <strong>{isLegacy ? 'Base Freight Quote' : 'Shipment Price Summary'}</strong>
         </div>
         <span
           className={`cost-mode-pill ${
             isLegacy ? 'cost-mode-legacy' : 'cost-mode-itemised'
           }`}
         >
-          {isLegacy ? 'Legacy Base-Rate Only' : `${lines.length} Charge Lines · ${currency}`}
+          {isLegacy
+            ? 'Base Freight Only'
+            : `${lines.length} Configured Line${lines.length === 1 ? '' : 's'} · ${currency}`}
         </span>
       </div>
 
-      {/* Legacy Pricing Notice */}
+      {/* Legacy Listing Warning */}
       {isLegacy && (
         <div className="cost-legacy-notice" role="status">
           <Info size={15} className="cost-notice-icon" />
           <div>
-            <strong>Legacy Pricing Notice:</strong> No itemised origin or destination surcharges are
-            configured on this listing. The total below reflects base ocean freight only (
-            <code>GREATEST(CBM &times; rate, Tonnes &times; rate, Minimum Charge)</code>). Local
-            terminal, customs, or destination fees are not itemised here.
+            <strong>Additional charges have not been itemised:</strong> This listing only specifies
+            a base ocean freight rate. Origin terminal handling, documentation, customs clearance,
+            and destination charges are not included in this quote.
           </div>
         </div>
       )}
 
-      {/* Billable W/M & Rule Metadata Strip */}
-      {!isLegacy && quantities.billable_cbm !== undefined && (
-        <div className="cost-quantities-strip">
-          <span>
-            Requested: <strong>{Number(quantities.actual_cbm || 0).toFixed(2)} CBM</strong> /{' '}
-            <strong>{Number(quantities.actual_weight_tonnes || 0).toFixed(2)} t</strong>
-          </span>
-          <span>
-            Billable W/M Volume: <strong>{Number(quantities.billable_cbm || 0).toFixed(2)} CBM</strong>
-            {pricingRule?.min_billable_cbm
-              ? ` (Min ${Number(pricingRule.min_billable_cbm).toFixed(2)} CBM)`
-              : ''}
-          </span>
-          {pricingRule && (
-            <span>
-              Free Storage: <strong>{pricingRule.free_storage_days ?? 3} days</strong>
-              {Number(pricingRule.storage_rate_per_cbm_day || 0) > 0
-                ? ` (${Number(pricingRule.storage_rate_per_cbm_day).toFixed(2)} ${currency}/CBM/day after)`
-                : ''}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* Itemised Charge Lines Table */}
-      <div className="cost-lines-table-wrap">
-        <table className="cost-lines-table">
-          <thead>
-            <tr>
-              <th>Charge &amp; Stage</th>
-              <th>Calculation Basis</th>
-              <th>Payer &amp; Timing</th>
-              <th>Status / Certainty</th>
-              <th style={{ textAlign: 'right' }}>Estimated Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((line, idx) => (
-              <tr
-                key={`${line.charge_type_code || 'custom'}-${idx}`}
-                className={
-                  line.treatment === 'excluded'
-                    ? 'cost-row-excluded'
-                    : line.treatment !== 'charged'
-                    ? 'cost-row-muted'
-                    : ''
-                }
-              >
-                <td>
-                  <div className="cost-line-name">{line.charge_name}</div>
-                  <span className={`cost-stage-tag stage-${line.stage || 'ocean'}`}>
-                    {STAGE_LABELS[line.stage] || line.stage}
-                  </span>
-                </td>
-                <td className="cost-basis-cell">{formatBasisDetail(line, currency)}</td>
-                <td>
-                  <div className="cost-payer-cell">
-                    <span className="cost-payer-tag">
-                      {line.payer === 'consignee' ? 'Consignee' : 'Shipper'}
-                    </span>
-                    <span className="cost-timing-sub">
-                      {TIMING_LABELS[line.payment_timing] || line.payment_timing}
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <div className="cost-badges-cell">
-                    {renderTreatmentBadge(line)}
-                    {renderCertaintyBadge(line.certainty)}
-                  </div>
-                </td>
-                <td style={{ textAlign: 'right' }}>{renderLineAmount(line, currency)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Stage & Payer Totals Breakdown */}
-      <div className="cost-totals-grid">
+      {/* Primary Summary Cards: Base Freight, Additional Charges, Shipper Pays, Consignee Pays, Estimated Total */}
+      <div className="cost-summary-grid">
         <div className="cost-total-card">
-          <span className="cost-total-label">Base Ocean Freight</span>
+          <span className="cost-total-label">1. Base Freight</span>
           <strong className="cost-total-val">
             {formatMoney(totals.base_freight ?? quote.base_freight, currency)}
           </strong>
-          {quote.base_freight_details?.governing_basis && (
-            <span className="cost-total-sub">
-              Basis: {quote.base_freight_details.governing_basis.replace(/_/g, ' ')}
-            </span>
-          )}
+          <span className="cost-total-sub">
+            {quote.base_freight_details?.governing_basis
+              ? `Core transport (${quote.base_freight_details.governing_basis.replace(/_/g, ' ')})`
+              : 'Core ocean transport amount'}
+          </span>
         </div>
 
         <div className="cost-total-card">
-          <span className="cost-total-label">Shipper Prepaid Total</span>
-          <strong className="cost-total-val">
-            {formatMoney(totals.estimated_shipper_prepaid_total, currency)}
-          </strong>
-          <span className="cost-total-sub">Payable by shipper prior to departure</span>
+          <span className="cost-total-label">2. Additional Charges</span>
+          <strong className="cost-total-val cost-total-val-md">{additionalSummaryLabel}</strong>
+          <span className="cost-total-sub">{additionalSummarySub}</span>
         </div>
 
-        <div className="cost-total-card">
-          <span className="cost-total-label">Consignee Payable Total</span>
-          <strong className="cost-total-val">
-            {formatMoney(totals.estimated_consignee_payable_total, currency)}
-          </strong>
-          <span className="cost-total-sub">Collect / destination charges</span>
-        </div>
+        {!isLegacy && (
+          <>
+            <div className="cost-total-card">
+              <span className="cost-total-label">Shipper Pays</span>
+              <strong className="cost-total-val">
+                {formatMoney(totals.estimated_shipper_prepaid_total, currency)}
+              </strong>
+              <span className="cost-total-sub">Prepaid origin &amp; ocean charges</span>
+            </div>
+
+            <div className="cost-total-card">
+              <span className="cost-total-label">Consignee Pays</span>
+              <strong className="cost-total-val">
+                {formatMoney(totals.estimated_consignee_payable_total, currency)}
+              </strong>
+              <span className="cost-total-sub">Destination / collect charges</span>
+            </div>
+          </>
+        )}
 
         <div className="cost-total-card cost-total-card-highlight">
           <span className="cost-total-label">
-            {isLegacy ? 'Estimated Base Freight Total' : 'Estimated All-In Total'}
+            {isLegacy
+              ? 'Base Freight Total (Not All-In)'
+              : onlyUncalculableAdditional
+              ? 'Known Base Freight Subtotal'
+              : hasUncalculableCharges
+              ? '3. Estimated Total (Known Charges)'
+              : '3. Estimated Total'}
           </span>
           <strong className="cost-total-val text-orange">
             {formatMoney(totals.estimated_all_in_total, currency)}
           </strong>
           {hasRange ? (
             <span className="cost-total-sub">
-              Range: {formatMoney(rangeMin, currency)} &ndash; {formatMoney(rangeMax, currency)}
+              Estimated range: {formatMoney(rangeMin, currency)} &ndash;{' '}
+              {formatMoney(rangeMax, currency)}
             </span>
           ) : (
-            !isLegacy &&
-            totals.by_stage && (
-              <span className="cost-total-sub">
-                Origin {Number(totals.by_stage.origin || 0).toFixed(2)} · Ocean{' '}
-                {Number(totals.by_stage.ocean || 0).toFixed(2)} · Dest{' '}
-                {Number(totals.by_stage.destination || 0).toFixed(2)}
-              </span>
-            )
+            <span className="cost-total-sub">
+              {isLegacy
+                ? 'Additional charges not itemised'
+                : hasUncalculableCharges
+                ? 'Excludes variable at-cost & excluded fees'
+                : 'Includes base freight & configured charges'}
+            </span>
           )}
         </div>
       </div>
 
-      {/* Warnings for Excluded, Conditional, Variable, or Missing Destination Charges */}
-      {!compact && warnings.length > 0 && !isLegacy && (
+      {/* Concise Additional Charges List (when itemised) */}
+      {!isLegacy && additionalLines.length > 0 && (
+        <div className="cost-quick-lines-box">
+          <div className="cost-quick-lines-title">Configured Additional Charges</div>
+          <div className="cost-quick-lines-list">
+            {additionalLines.map((line, idx) => (
+              <div key={idx} className="cost-quick-line-row">
+                <div className="cost-quick-line-left">
+                  <span className={`cost-stage-tag stage-${line.stage || 'ocean'}`}>
+                    {STAGE_LABELS[line.stage] || line.stage}
+                  </span>
+                  <span className="cost-quick-line-name">{line.charge_name}</span>
+                  <span className="cost-quick-line-payer">
+                    ({line.payer === 'consignee' ? 'Consignee' : 'Shipper'})
+                  </span>
+                </div>
+                <div className="cost-quick-line-right">
+                  {renderLineAmount(line, currency)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Variable, Conditional, or Excluded Charges Disclosure */}
+      {!isLegacy && (nonIncludedVariableOrExcludedLines.length > 0 || warnings.length > 0) && (
         <div className="cost-warnings-box">
           <div className="cost-warnings-header">
             <ShieldAlert size={14} />
-            <span>Important Pricing Disclosures &amp; Exclusions</span>
+            <span>Not Included in Estimated Total / Pricing Notes</span>
           </div>
           <ul className="cost-warnings-list">
             {warnings.map((w, i) => (
               <li key={i}>{w}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Collapsible Itemised Breakdown Section */}
+      {lines.length > 0 && (
+        <div className="cost-collapsible-section">
+          <button
+            type="button"
+            className="cost-collapse-toggle-btn"
+            onClick={() => setShowBreakdown((prev) => !prev)}
+            aria-expanded={showBreakdown}
+          >
+            <span>
+              {showBreakdown
+                ? 'Hide itemised breakdown'
+                : `View itemised breakdown (${lines.length} ${
+                    lines.length === 1 ? 'line' : 'lines'
+                  })`}
+            </span>
+            {showBreakdown ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+          </button>
+
+          {showBreakdown && (
+            <div className="cost-collapsible-body">
+              {!isLegacy && quantities.billable_cbm !== undefined && (
+                <div className="cost-quantities-strip">
+                  <span>
+                    Shipment: <strong>{Number(quantities.actual_cbm || 0).toFixed(2)} CBM</strong> /{' '}
+                    <strong>{Number(quantities.actual_weight_tonnes || 0).toFixed(2)} t</strong>
+                  </span>
+                  <span>
+                    Billable Volume:{' '}
+                    <strong>{Number(quantities.billable_cbm || 0).toFixed(2)} CBM</strong>
+                    {pricingRule?.min_billable_cbm
+                      ? ` (Min ${Number(pricingRule.min_billable_cbm).toFixed(2)} CBM)`
+                      : ''}
+                  </span>
+                  {pricingRule && (
+                    <span>
+                      Free Storage: <strong>{pricingRule.free_storage_days ?? 3} days</strong>
+                      {Number(pricingRule.storage_rate_per_cbm_day || 0) > 0
+                        ? ` (${Number(pricingRule.storage_rate_per_cbm_day).toFixed(2)} ${currency}/CBM/day after)`
+                        : ''}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="cost-lines-table-wrap">
+                <table className="cost-lines-table">
+                  <thead>
+                    <tr>
+                      <th>Charge &amp; Stage</th>
+                      <th>Basis &amp; Notes</th>
+                      <th>Payer &amp; Timing</th>
+                      <th>Treatment &amp; Certainty</th>
+                      <th style={{ textAlign: 'right' }}>Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {lines.map((line, idx) => (
+                      <tr
+                        key={`${line.charge_type_code || 'custom'}-${idx}`}
+                        className={
+                          line.treatment === 'excluded'
+                            ? 'cost-row-excluded'
+                            : line.treatment !== 'charged'
+                            ? 'cost-row-muted'
+                            : ''
+                        }
+                      >
+                        <td>
+                          <div className="cost-line-name">{line.charge_name}</div>
+                          <span className={`cost-stage-tag stage-${line.stage || 'ocean'}`}>
+                            {STAGE_LABELS[line.stage] || line.stage}
+                          </span>
+                        </td>
+                        <td className="cost-basis-cell">
+                          <div>{formatBasisDetail(line, currency)}</div>
+                          {line.explanatory_note && (
+                            <div className="cost-note-sub">{line.explanatory_note}</div>
+                          )}
+                        </td>
+                        <td>
+                          <div className="cost-payer-cell">
+                            <span className="cost-payer-tag">
+                              {line.payer === 'consignee' ? 'Consignee' : 'Shipper'}
+                            </span>
+                            <span className="cost-timing-sub">
+                              {TIMING_LABELS[line.payment_timing] || line.payment_timing}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <div className="cost-badges-cell">
+                            {renderTreatmentBadge(line)}
+                            {renderCertaintyBadge(line)}
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }}>{renderLineAmount(line, currency)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -369,7 +530,9 @@ export function LiveQuoteBreakdown({ quote, loading = false, error = null, compa
  * Displays the immutable booking financial snapshot from booking_charge_snapshot
  * and v_booking_itemised_cost (never from live listing rates).
  */
-export function SavedBookingSnapshotBreakdown({ booking }) {
+export function SavedBookingSnapshotBreakdown({ booking, defaultExpanded = false }) {
+  const [showBreakdown, setShowBreakdown] = useState(defaultExpanded);
+
   if (!booking) return null;
 
   const summary = booking.itemised_cost_summary || null;
@@ -386,16 +549,17 @@ export function SavedBookingSnapshotBreakdown({ booking }) {
   const allInTotal = Number(summary?.total_all_in_cost ?? booking.total_price ?? 0);
   const shipperPrepaid = Number(summary?.total_shipper_prepaid ?? 0);
   const consigneeCollect = Number(summary?.total_consignee_collect ?? 0);
-  const originCharges = Number(summary?.origin_charges ?? 0);
-  const oceanCharges = Number(summary?.ocean_charges ?? 0);
-  const destinationCharges = Number(summary?.destination_charges ?? 0);
+
+  const excludedOrAtCostSnapshots = snapshots.filter(
+    (s) => s.treatment === 'excluded' || s.basis === 'at_cost'
+  );
 
   return (
     <div className="itemised-cost-panel snapshot-cost-panel">
       <div className="itemised-cost-header">
         <div className="itemised-cost-title-wrap">
           <Lock size={15} className="text-orange" />
-          <strong>Frozen Booking Price Snapshot</strong>
+          <strong>Saved Booking Price Snapshot</strong>
         </div>
         <span
           className={`cost-mode-pill ${
@@ -403,8 +567,8 @@ export function SavedBookingSnapshotBreakdown({ booking }) {
           }`}
         >
           {isLegacy
-            ? 'Legacy Booking (Base Freight Only)'
-            : `${snapshots.length} Frozen Snapshot Lines · Immutable`}
+            ? 'Base Freight Only'
+            : `${snapshots.length} Saved Charge Line${snapshots.length === 1 ? '' : 's'}`}
         </span>
       </div>
 
@@ -412,96 +576,143 @@ export function SavedBookingSnapshotBreakdown({ booking }) {
         <div className="cost-legacy-notice">
           <Info size={15} className="cost-notice-icon" />
           <div>
-            <strong>Legacy Booking Record:</strong> This booking was created on a listing without
-            itemised charge items (`0` rows in <code>booking_charge_snapshot</code>). The frozen
-            base freight from <code>booking.total_price</code> is{' '}
-            <strong>{formatMoney(baseTotal, currency)}</strong>.
+            <strong>Base Freight Booking:</strong> This booking was confirmed on a listing without
+            itemised additional charges. The saved base freight amount is{' '}
+            <strong>{formatMoney(baseTotal, currency)}</strong>. Additional origin or destination
+            charges were not itemised on this listing.
           </div>
         </div>
       ) : (
         <>
-          <div className="cost-lines-table-wrap">
-            <table className="cost-lines-table">
-              <thead>
-                <tr>
-                  <th>Frozen Charge Line</th>
-                  <th>Frozen Basis &amp; Rate</th>
-                  <th>Payer &amp; Timing</th>
-                  <th>Treatment / Certainty</th>
-                  <th style={{ textAlign: 'right' }}>Frozen Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshots.map((snap) => (
-                  <tr
-                    key={snap.id || `${snap.charge_name}-${snap.stage}`}
-                    className={
-                      snap.treatment === 'excluded'
-                        ? 'cost-row-excluded'
-                        : snap.treatment !== 'charged'
-                        ? 'cost-row-muted'
-                        : ''
-                    }
-                  >
-                    <td>
-                      <div className="cost-line-name">{snap.charge_name}</div>
-                      <span className={`cost-stage-tag stage-${snap.stage || 'ocean'}`}>
-                        {STAGE_LABELS[snap.stage] || snap.stage}
-                      </span>
-                    </td>
-                    <td className="cost-basis-cell">{formatBasisDetail(snap, currency)}</td>
-                    <td>
-                      <div className="cost-payer-cell">
-                        <span className="cost-payer-tag">
-                          {snap.payer === 'consignee' ? 'Consignee' : 'Shipper'}
-                        </span>
-                        <span className="cost-timing-sub">
-                          {TIMING_LABELS[snap.payment_timing] || snap.payment_timing}
-                        </span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="cost-badges-cell">
-                        {renderTreatmentBadge(snap)}
-                        {renderCertaintyBadge(snap.certainty)}
-                      </div>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>{renderLineAmount(snap, currency)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="cost-totals-grid">
+          <div className="cost-summary-grid">
             <div className="cost-total-card">
-              <span className="cost-total-label">Base Freight (booking.total_price)</span>
+              <span className="cost-total-label">Base Freight</span>
               <strong className="cost-total-val">{formatMoney(baseTotal, currency)}</strong>
-              <span className="cost-total-sub">
-                Origin {originCharges.toFixed(2)} · Ocean {oceanCharges.toFixed(2)} · Dest{' '}
-                {destinationCharges.toFixed(2)}
-              </span>
+              <span className="cost-total-sub">Core ocean freight locked at booking</span>
             </div>
 
             <div className="cost-total-card">
-              <span className="cost-total-label">Frozen Shipper Prepaid</span>
+              <span className="cost-total-label">Shipper Pays</span>
               <strong className="cost-total-val">{formatMoney(shipperPrepaid, currency)}</strong>
-              <span className="cost-total-sub">Shipper responsibility</span>
+              <span className="cost-total-sub">Prepaid charges</span>
             </div>
 
             <div className="cost-total-card">
-              <span className="cost-total-label">Frozen Consignee Payable</span>
+              <span className="cost-total-label">Consignee Pays</span>
               <strong className="cost-total-val">{formatMoney(consigneeCollect, currency)}</strong>
-              <span className="cost-total-sub">Consignee responsibility</span>
+              <span className="cost-total-sub">Destination / collect charges</span>
             </div>
 
             <div className="cost-total-card cost-total-card-highlight">
-              <span className="cost-total-label">Frozen All-In Total</span>
+              <span className="cost-total-label">
+                {excludedOrAtCostSnapshots.length > 0
+                  ? 'Saved Total (Known Charges)'
+                  : 'Saved Total Charged'}
+              </span>
               <strong className="cost-total-val text-orange">
                 {formatMoney(allInTotal, currency)}
               </strong>
-              <span className="cost-total-sub">Protected by DB immutability trigger</span>
+              <span className="cost-total-sub">Locked at booking confirmation</span>
             </div>
+          </div>
+
+          {excludedOrAtCostSnapshots.length > 0 && (
+            <div className="cost-warnings-box">
+              <div className="cost-warnings-header">
+                <ShieldAlert size={14} />
+                <span>Variable or Excluded Items Not Included in Saved Total</span>
+              </div>
+              <ul className="cost-warnings-list">
+                {excludedOrAtCostSnapshots.map((s, idx) => (
+                  <li key={idx}>
+                    <strong>{s.charge_name}</strong> ({STAGE_LABELS[s.stage] || s.stage}):{' '}
+                    {s.treatment === 'excluded'
+                      ? `Excluded from total — payable separately by ${s.payer}.`
+                      : `Billed at actual cost (${s.payer}).`}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="cost-collapsible-section">
+            <button
+              type="button"
+              className="cost-collapse-toggle-btn"
+              onClick={() => setShowBreakdown((prev) => !prev)}
+              aria-expanded={showBreakdown}
+            >
+              <span>
+                {showBreakdown
+                  ? 'Hide itemised breakdown'
+                  : `View itemised breakdown (${snapshots.length} saved ${
+                      snapshots.length === 1 ? 'line' : 'lines'
+                    })`}
+              </span>
+              {showBreakdown ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+            </button>
+
+            {showBreakdown && (
+              <div className="cost-collapsible-body">
+                <div className="cost-lines-table-wrap">
+                  <table className="cost-lines-table">
+                    <thead>
+                      <tr>
+                        <th>Charge &amp; Stage</th>
+                        <th>Basis &amp; Notes</th>
+                        <th>Payer &amp; Timing</th>
+                        <th>Treatment &amp; Certainty</th>
+                        <th style={{ textAlign: 'right' }}>Saved Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {snapshots.map((snap) => (
+                        <tr
+                          key={snap.id || `${snap.charge_name}-${snap.stage}`}
+                          className={
+                            snap.treatment === 'excluded'
+                              ? 'cost-row-excluded'
+                              : snap.treatment !== 'charged'
+                              ? 'cost-row-muted'
+                              : ''
+                          }
+                        >
+                          <td>
+                            <div className="cost-line-name">{snap.charge_name}</div>
+                            <span className={`cost-stage-tag stage-${snap.stage || 'ocean'}`}>
+                              {STAGE_LABELS[snap.stage] || snap.stage}
+                            </span>
+                          </td>
+                          <td className="cost-basis-cell">
+                            <div>{formatBasisDetail(snap, currency)}</div>
+                            {snap.explanatory_note && (
+                              <div className="cost-note-sub">{snap.explanatory_note}</div>
+                            )}
+                          </td>
+                          <td>
+                            <div className="cost-payer-cell">
+                              <span className="cost-payer-tag">
+                                {snap.payer === 'consignee' ? 'Consignee' : 'Shipper'}
+                              </span>
+                              <span className="cost-timing-sub">
+                                {TIMING_LABELS[snap.payment_timing] || snap.payment_timing}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="cost-badges-cell">
+                              {renderTreatmentBadge(snap)}
+                              {renderCertaintyBadge(snap)}
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>{renderLineAmount(snap, currency)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         </>
       )}

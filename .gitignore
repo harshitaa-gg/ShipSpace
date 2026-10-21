@@ -26,3 +26,5 @@ dist/
 frontend/dist/
 
 shipspace_before_feature_a.dump
+shipspace_before_feature_b.dump
+backend/private_uploads/

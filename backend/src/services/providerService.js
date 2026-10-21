@@ -393,6 +393,7 @@ async function cancelBookingByProvider({ bookingId, providerId, reason }) {
 }
 
 const pricingEngine = require("./pricingEngine");
+const timelineService = require("./timelineService");
 
 async function getListingPricing(listingId, { providerId = null } = {}) {
     const pricing = await pricingEngine.getListingPricing(listingId);
@@ -417,6 +418,30 @@ async function upsertListingPricing({ listingId, providerId, pricingRule, charge
     });
 }
 
+async function getListingSchedule(listingId, { providerId = null } = {}) {
+    return timelineService.getListingSchedule(listingId, { providerId });
+}
+
+async function upsertListingSchedule({
+    listingId,
+    providerId,
+    schedulePolicy,
+    milestoneTemplates,
+    reason,
+}) {
+    return timelineService.upsertListingSchedule({
+        listingId,
+        providerId,
+        schedulePolicy,
+        milestoneTemplates,
+        reason,
+    });
+}
+
+async function recordBookingRolloverDecision(params) {
+    return timelineService.recordBookingRolloverDecision(params);
+}
+
 module.exports = {
     createListing,
     getProviderListings,
@@ -426,4 +451,7 @@ module.exports = {
     cancelBookingByProvider,
     getListingPricing,
     upsertListingPricing,
+    getListingSchedule,
+    upsertListingSchedule,
+    recordBookingRolloverDecision,
 };

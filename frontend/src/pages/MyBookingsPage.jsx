@@ -21,6 +21,7 @@ import {
 import { api } from '../api/client';
 import { useIdentity } from '../context/IdentityContext';
 import { SavedBookingSnapshotBreakdown } from '../components/ItemisedCostBreakdown';
+import BookingTimelineAndDocsModal from '../components/BookingTimelineAndDocsModal';
 
 export default function MyBookingsPage() {
   const {
@@ -43,6 +44,9 @@ export default function MyBookingsPage() {
   // Detail & audit history modal state
   const [inspectedBooking, setInspectedBooking] = useState(null);
   const [inspectLoading, setInspectLoading] = useState(false);
+
+  // Feature B Timeline & Documents modal state
+  const [timelineModalBooking, setTimelineModalBooking] = useState(null);
 
   // Cancellation confirmation modal state
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -387,6 +391,7 @@ export default function MyBookingsPage() {
         ) : (
           <div className="bookings-stack">
             {filteredBookings.map((b) => {
+              const isCancelled = b.booking_status === 'cancelled';
               const canCancel =
                 b.booking_status === 'confirmed' || b.booking_status === 'pending';
               const detail = bookingDetailsMap[b.booking_id] || null;
@@ -397,32 +402,33 @@ export default function MyBookingsPage() {
                 : Number(b.total_price);
 
               return (
-                <article key={b.booking_id} className="booking-row-card">
+                <article
+                  key={b.booking_id}
+                  className={`booking-row-card ${
+                    isCancelled ? 'booking-row-cancelled' : 'booking-row-active'
+                  }`}
+                >
                   <div className="booking-row-header">
                     <div className="booking-id-group">
                       <span className="booking-ref-badge">Booking #{b.booking_id}</span>
                       <span className={`status-badge status-${b.booking_status}`}>
                         {b.booking_status}
                       </span>
-                      <span className="booking-listing-ref">
-                        Listing #{b.listing_id} ({b.listing_status})
-                      </span>
+                      <span className="booking-listing-ref">Listing #{b.listing_id}</span>
                       {detail && (
                         <span
                           className={`cost-mode-pill ${
                             isItemised ? 'cost-mode-itemised' : 'cost-mode-legacy'
                           }`}
                         >
-                          {isItemised
-                            ? `${detail.charge_snapshots?.length || 0} Frozen Charge Lines`
-                            : 'Legacy Base Freight'}
+                          {isItemised ? 'Itemised Pricing' : 'Base Freight Only'}
                         </span>
                       )}
                     </div>
 
                     <div className="booking-timestamp">
                       <Clock size={13} />
-                      <span>Booked {new Date(b.booking_date).toLocaleString()}</span>
+                      <span>Booked {new Date(b.booking_date).toLocaleDateString()}</span>
                     </div>
                   </div>
 
@@ -438,9 +444,13 @@ export default function MyBookingsPage() {
                       </div>
                       <div className="booking-provider-sub">
                         <Building2 size={14} className="text-muted" />
-                        <span>Provider: <strong>{b.provider_company || b.provider_name}</strong></span>
+                        <span>
+                          Provider: <strong>{b.provider_company || b.provider_name}</strong>
+                        </span>
                         <span className="dot-sep">&bull;</span>
-                        <span>Cargo: <strong>{b.cargo_type_name}</strong></span>
+                        <span>
+                          Cargo: <strong>{b.cargo_type_name}</strong>
+                        </span>
                       </div>
                     </div>
 
@@ -456,7 +466,7 @@ export default function MyBookingsPage() {
                       </div>
                     </div>
 
-                    {/* Quantities */}
+                    {/* Shipment Quantity */}
                     <div className="booking-quantities-col">
                       <div className="qty-chip">
                         <Box size={14} className="text-orange" />
@@ -464,33 +474,56 @@ export default function MyBookingsPage() {
                       </div>
                       <div className="qty-chip">
                         <Scale size={14} className="text-orange" />
-                        <span>
-                          {Number(b.booked_weight).toFixed(2)} t (
-                          {Math.round(Number(b.booked_weight) * 1000).toLocaleString()} kg)
-                        </span>
+                        <span>{Number(b.booked_weight).toFixed(2)} t</span>
                       </div>
                     </div>
 
-                    {/* Total & Actions */}
+                    {/* Total Charged & Actions */}
                     <div className="booking-actions-col">
                       <div className="booking-price-display">
                         <span className="metric-caption">
-                          {isItemised ? 'Frozen All-In Total' : 'Total Charged'}
+                          {isCancelled ? 'Cancelled Total' : 'Total Charged'}
                         </span>
-                        <strong className="booking-price-amount">
+                        <strong
+                          className={`booking-price-amount ${
+                            isCancelled ? 'booking-price-cancelled' : ''
+                          }`}
+                        >
                           ${displayTotal.toLocaleString('en-US', { minimumFractionDigits: 2 })}
                         </strong>
-                        {isItemised && (
+                        {isCancelled ? (
+                          <span className="text-muted-sm">Capacity restored</span>
+                        ) : isItemised ? (
                           <span className="text-muted-sm">
                             Base: ${Number(b.total_price).toFixed(2)}
                           </span>
-                        )}
+                        ) : null}
                       </div>
 
                       <div className="booking-btn-group">
                         <button
                           type="button"
-                          className="btn-secondary-sm"
+                          className="btn-ghost-sm"
+                          style={{ color: '#0f172a', borderColor: '#cbd5e1', background: '#f8fafc', fontWeight: 600 }}
+                          onClick={() => setTimelineModalBooking({ booking: b, initialTab: 'timeline' })}
+                        >
+                          <Calendar size={13} className="text-orange" />
+                          <span>Timeline</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-ghost-sm"
+                          style={{ color: '#0f172a', borderColor: '#cbd5e1', background: '#f8fafc', fontWeight: 600 }}
+                          onClick={() => setTimelineModalBooking({ booking: b, initialTab: 'documents' })}
+                        >
+                          <FileText size={13} className="text-orange" />
+                          <span>Export Docs</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          className="btn-ghost-sm"
                           onClick={() => handleToggleSnapshot(b.booking_id)}
                         >
                           <Lock size={13} />
@@ -503,10 +536,10 @@ export default function MyBookingsPage() {
 
                         <button
                           type="button"
-                          className="btn-secondary-sm"
+                          className="btn-ghost-sm"
                           onClick={() => handleInspectBooking(b.booking_id)}
                         >
-                          <History size={14} />
+                          <History size={13} />
                           <span>Audit Trail</span>
                         </button>
 
@@ -525,7 +558,7 @@ export default function MyBookingsPage() {
                   </div>
 
                   {expandedSnapshotId === b.booking_id && (
-                    <div style={{ marginTop: '12px' }}>
+                    <div style={{ marginTop: '10px' }}>
                       <SavedBookingSnapshotBreakdown booking={detail || b} />
                     </div>
                   )}
@@ -675,7 +708,7 @@ export default function MyBookingsPage() {
                       </span>
                     </div>
                     <div className="receipt-item">
-                      <span className="receipt-label">Base Freight (booking.total_price)</span>
+                      <span className="receipt-label">Base Freight</span>
                       <span className="receipt-value">
                         ${Number(inspectedBooking.total_price).toFixed(2)} USD
                       </span>
@@ -731,6 +764,21 @@ export default function MyBookingsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Feature B: Booking Timeline, Export Documents & Rollover Modal */}
+      {timelineModalBooking && (
+        <BookingTimelineAndDocsModal
+          booking={timelineModalBooking.booking}
+          initialTab={timelineModalBooking.initialTab || 'timeline'}
+          role="trader"
+          actorUserId={Number(selectedTraderId)}
+          onClose={() => setTimelineModalBooking(null)}
+          onBookingChanged={() => {
+            loadBookings();
+            refreshCatalog();
+          }}
+        />
       )}
     </div>
   );

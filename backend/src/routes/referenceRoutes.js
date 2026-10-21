@@ -19,4 +19,8 @@ router.post("/cargo-types", referenceController.createCargoType);
 router.get("/charge-types", referenceController.getChargeTypes);
 router.get("/standard-charge-types", referenceController.getChargeTypes);
 
+// Standard Milestone Types Catalogue (Feature B)
+router.get("/milestone-types", referenceController.getMilestoneTypes);
+router.get("/standard-milestone-types", referenceController.getMilestoneTypes);
+
 module.exports = router;

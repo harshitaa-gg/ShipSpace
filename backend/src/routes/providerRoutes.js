@@ -32,4 +32,15 @@ router.post("/:providerId/listings/:listingId/pricing", providerController.upser
 router.put("/listings/:listingId/pricing", providerController.upsertListingPricing);
 router.post("/listings/:listingId/pricing", providerController.upsertListingPricing);
 
+// Feature B: Listing Schedule Policy, Milestone Templates & Rollover Decisions
+router.get("/listings/:listingId/schedule", providerController.getListingSchedule);
+router.get("/:providerId/listings/:listingId/schedule", providerController.getListingSchedule);
+router.put("/:providerId/listings/:listingId/schedule", providerController.upsertListingSchedule);
+router.post("/:providerId/listings/:listingId/schedule", providerController.upsertListingSchedule);
+router.put("/listings/:listingId/schedule", providerController.upsertListingSchedule);
+router.post("/listings/:listingId/schedule", providerController.upsertListingSchedule);
+
+router.post("/bookings/:bookingId/rollover", providerController.recordBookingRolloverDecision);
+router.post("/:providerId/bookings/:bookingId/rollover", providerController.recordBookingRolloverDecision);
+
 module.exports = router;

@@ -162,6 +162,7 @@ async function createCargoType({ name, description, admin_id }) {
 }
 
 const { getStandardChargeTypes } = require("./pricingEngine");
+const { getStandardMilestoneTypes } = require("./timelineService");
 
 module.exports = {
     getAllPorts,
@@ -171,4 +172,5 @@ module.exports = {
     getAllCargoTypes,
     createCargoType,
     getStandardChargeTypes,
+    getStandardMilestoneTypes,
 };

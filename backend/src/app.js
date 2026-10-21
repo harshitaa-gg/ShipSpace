@@ -17,7 +17,7 @@ const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
 
 // ----------------------------------------------------------------------------
 // 1. Health & Connectivity Endpoints
@@ -90,12 +90,31 @@ app.post("/api/listings/:listingId/quote", traderController.getListingQuote);
 app.get("/api/quotes", traderController.getListingQuote);
 app.post("/api/quotes", traderController.getListingQuote);
 
+// Feature B: Top-level REST resource aliases for listing schedules, booking timelines, documents, rollover, reminders & notifications
+app.get("/api/listings/:listingId/schedule", providerController.getListingSchedule);
+app.put("/api/listings/:listingId/schedule", providerController.upsertListingSchedule);
+app.post("/api/listings/:listingId/schedule", providerController.upsertListingSchedule);
+
 app.get("/api/bookings", traderController.getTraderBookings);
 
 app.post("/api/bookings", traderController.createBooking);
 app.get("/api/bookings/:bookingId", traderController.getBookingDetails);
 app.post("/api/bookings/:bookingId/cancel", traderController.cancelBookingByTrader);
 app.patch("/api/bookings/:bookingId/cancel", traderController.cancelBookingByTrader);
+
+app.get("/api/bookings/:bookingId/timeline", traderController.getBookingTimeline);
+app.patch("/api/bookings/:bookingId/milestones/:milestoneId", traderController.updateBookingMilestone);
+app.post("/api/bookings/:bookingId/documents/init", traderController.initBookingDocuments);
+app.post("/api/bookings/:bookingId/documents/:checklistItemId/upload", traderController.uploadBookingDocument);
+app.patch("/api/bookings/:bookingId/documents/:checklistItemId", traderController.updateBookingDocumentChecklistItem);
+app.patch("/api/bookings/:bookingId/documents/:checklistItemId/review", traderController.updateBookingDocumentChecklistItem);
+app.get("/api/bookings/:bookingId/documents/uploads/:uploadId/download", traderController.downloadBookingDocument);
+app.post("/api/bookings/:bookingId/rollover", providerController.recordBookingRolloverDecision);
+
+app.post("/api/reminders/process", traderController.processReminders);
+app.get("/api/notifications", traderController.getNotifications);
+app.patch("/api/notifications/:notificationId/read", traderController.markNotificationRead);
+app.post("/api/notifications/read-all", traderController.markAllNotificationsRead);
 
 // ----------------------------------------------------------------------------
 // 3. 404 & Centralized Error Handling

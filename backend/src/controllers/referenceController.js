@@ -93,6 +93,15 @@ const getChargeTypes = asyncHandler(async (req, res) => {
     });
 });
 
+const getMilestoneTypes = asyncHandler(async (req, res) => {
+    const milestoneTypes = await referenceService.getStandardMilestoneTypes();
+    res.json({
+        success: true,
+        count: milestoneTypes.length,
+        data: milestoneTypes,
+    });
+});
+
 module.exports = {
     getPorts,
     createPort,
@@ -101,4 +110,5 @@ module.exports = {
     getCargoTypes,
     createCargoType,
     getChargeTypes,
+    getMilestoneTypes,
 };

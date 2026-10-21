@@ -246,6 +246,214 @@ const getListingQuote = asyncHandler(async (req, res) => {
     });
 });
 
+function resolveActorIdFromReq(req) {
+    const raw =
+        req.headers["x-user-id"] ??
+        req.headers["x-provider-id"] ??
+        req.headers["x-trader-id"] ??
+        req.body?.actor_user_id ??
+        req.body?.provider_id ??
+        req.body?.trader_id ??
+        req.body?.uploaded_by_user_id ??
+        req.body?.reviewed_by_user_id ??
+        req.params?.traderId ??
+        req.params?.providerId ??
+        req.query?.user_id ??
+        req.query?.provider_id ??
+        req.query?.trader_id;
+
+    return parsePositiveInt(raw, "actor_user_id");
+}
+
+const getBookingTimeline = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    const traderId = parseOptionalPositiveInt(
+        req.params.traderId ?? req.headers["x-trader-id"] ?? req.query.trader_id,
+        "trader_id"
+    );
+    const providerId = parseOptionalPositiveInt(
+        req.params.providerId ?? req.headers["x-provider-id"] ?? req.query.provider_id,
+        "provider_id"
+    );
+
+    const timeline = await traderService.getBookingTimeline(bookingId, {
+        traderId,
+        providerId,
+    });
+
+    res.json({
+        success: true,
+        data: timeline,
+    });
+});
+
+const updateBookingMilestone = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    const milestoneId = parsePositiveInt(req.params.milestoneId, "milestoneId");
+    const actorUserId = resolveActorIdFromReq(req);
+    const body = req.body || {};
+
+    const data = await traderService.updateBookingMilestone({
+        bookingId,
+        milestoneId,
+        actorUserId,
+        currentDueAt: body.current_due_at ?? body.currentDueAt,
+        status: body.status,
+        completionNote: body.completion_note ?? body.completionNote,
+        reason: body.reason ?? body.date_change_reason,
+    });
+
+    res.json({
+        success: true,
+        message: "Booking milestone updated successfully",
+        data,
+    });
+});
+
+const initBookingDocuments = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    await traderService.ensureBookingDocumentChecklist(bookingId);
+    const timeline = await traderService.getBookingTimeline(bookingId);
+
+    res.status(201).json({
+        success: true,
+        message: "Booking document checklist initialized",
+        data: timeline,
+    });
+});
+
+const uploadBookingDocument = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    const checklistItemId = parsePositiveInt(req.params.checklistItemId, "checklistItemId");
+    const uploadedByUserId = resolveActorIdFromReq(req);
+    const body = req.body || {};
+
+    const data = await traderService.uploadBookingDocument({
+        bookingId,
+        checklistItemId,
+        uploadedByUserId,
+        originalFilename: body.original_filename ?? body.originalFilename ?? body.filename,
+        mimeType: body.mime_type ?? body.mimeType,
+        fileBase64: body.file_base64 ?? body.fileBase64 ?? body.content_base64,
+        referenceValue: body.reference_value ?? body.referenceValue,
+    });
+
+    res.status(201).json({
+        success: true,
+        message: "Document uploaded and stored securely outside web root",
+        data,
+    });
+});
+
+const updateBookingDocumentChecklistItem = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    const checklistItemId = parsePositiveInt(req.params.checklistItemId, "checklistItemId");
+    const actorUserId = resolveActorIdFromReq(req);
+    const body = req.body || {};
+
+    const data = await traderService.updateBookingDocumentChecklistItem({
+        bookingId,
+        checklistItemId,
+        actorUserId,
+        status: body.status,
+        referenceValue: body.reference_value ?? body.referenceValue,
+        correctionReason: body.correction_reason ?? body.correctionReason ?? body.reason,
+    });
+
+    res.json({
+        success: true,
+        message: "Document checklist item updated successfully",
+        data,
+    });
+});
+
+const downloadBookingDocument = asyncHandler(async (req, res) => {
+    const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
+    const uploadId = parsePositiveInt(req.params.uploadId, "uploadId");
+    const actorUserId = resolveActorIdFromReq(req);
+
+    const fileMeta = await traderService.getBookingDocumentDownload({
+        bookingId,
+        uploadId,
+        actorUserId,
+    });
+
+    res.setHeader("Content-Type", fileMeta.mimeType);
+    res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${encodeURIComponent(fileMeta.originalFilename)}"`
+    );
+    res.sendFile(fileMeta.filePath);
+});
+
+const processReminders = asyncHandler(async (req, res) => {
+    const source = { ...req.query, ...(req.body || {}) };
+    const asOf = source.as_of ?? source.asOf ?? null;
+
+    const result = await traderService.processDueReminders({ asOf });
+    res.json({
+        success: true,
+        message: "Due reminders processed",
+        data: result,
+    });
+});
+
+const getNotifications = asyncHandler(async (req, res) => {
+    const userId = parsePositiveInt(
+        req.params.userId ??
+            req.params.traderId ??
+            req.params.providerId ??
+            req.headers["x-user-id"] ??
+            req.headers["x-trader-id"] ??
+            req.headers["x-provider-id"] ??
+            req.query.user_id ??
+            req.query.trader_id ??
+            req.query.provider_id,
+        "user_id"
+    );
+    const unreadOnly =
+        String(req.query.unread_only || "").toLowerCase() === "true" ||
+        req.query.unread_only === "1";
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+
+    const data = await traderService.getUserNotifications(userId, {
+        unreadOnly,
+        limit,
+    });
+
+    res.json({
+        success: true,
+        data,
+    });
+});
+
+const markNotificationRead = asyncHandler(async (req, res) => {
+    const notificationId = parsePositiveInt(req.params.notificationId, "notificationId");
+    const userId = resolveActorIdFromReq(req);
+
+    const data = await traderService.markNotificationRead({
+        notificationId,
+        userId,
+    });
+
+    res.json({
+        success: true,
+        message: "Notification marked as read",
+        data,
+    });
+});
+
+const markAllNotificationsRead = asyncHandler(async (req, res) => {
+    const userId = resolveActorIdFromReq(req);
+    const data = await traderService.markAllNotificationsRead(userId);
+
+    res.json({
+        success: true,
+        message: "All unread notifications marked as read",
+        data,
+    });
+});
+
 module.exports = {
     getAvailableListings,
     searchCapacity,
@@ -254,4 +462,14 @@ module.exports = {
     getBookingDetails,
     cancelBookingByTrader,
     getListingQuote,
+    getBookingTimeline,
+    updateBookingMilestone,
+    initBookingDocuments,
+    uploadBookingDocument,
+    updateBookingDocumentChecklistItem,
+    downloadBookingDocument,
+    processReminders,
+    getNotifications,
+    markNotificationRead,
+    markAllNotificationsRead,
 };

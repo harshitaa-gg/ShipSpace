@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { NavLink, Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   Menu,
@@ -15,8 +15,12 @@ import {
   Briefcase,
   ShieldAlert,
   Database,
+  Bell,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { useIdentity } from '../context/IdentityContext';
+import { api } from '../api/client';
 
 /**
  * Custom 3D isometric shipping container cube icon matching the ShipSpace logo
@@ -82,6 +86,10 @@ const SIDEBAR_ITEMS = [
 
 export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) {
   const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notifLoading, setNotifLoading] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const {
     traders,
@@ -140,6 +148,54 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
   };
 
   const badge = getCurrentContextBadge();
+
+  const loadNotifications = useCallback(async () => {
+    if (!badge.id) return;
+    setNotifLoading(true);
+    try {
+      const res = await api.getNotifications(badge.id);
+      if (res?.data) {
+        setNotifications(res.data.notifications || []);
+        setUnreadCount(Number(res.data.unread_count || 0));
+      }
+    } catch (_err) {
+      // Ignore quietly if offline
+    } finally {
+      setNotifLoading(false);
+    }
+  }, [badge.id]);
+
+  useEffect(() => {
+    loadNotifications();
+  }, [loadNotifications, location.pathname]);
+
+  const handleMarkOneRead = async (notifId) => {
+    try {
+      await api.markNotificationRead(notifId, badge.id);
+      await loadNotifications();
+    } catch (_err) {
+      // Ignore
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await api.markAllNotificationsRead(badge.id);
+      await loadNotifications();
+    } catch (_err) {
+      // Ignore
+    }
+  };
+
+  const handleRunDueReminders = async () => {
+    setNotifLoading(true);
+    try {
+      await api.processReminders();
+      await loadNotifications();
+    } catch (_err) {
+      setNotifLoading(false);
+    }
+  };
 
   return (
     <>
@@ -255,6 +311,36 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
             </nav>
 
             <div className="topbar-right-controls">
+              {/* Feature B: In-App Notifications Bell */}
+              <button
+                type="button"
+                className="topbar-identity-pill"
+                style={{ padding: '6px 10px', position: 'relative' }}
+                onClick={() => {
+                  setNotificationsOpen(true);
+                  loadNotifications();
+                }}
+                title={`Notifications for ${badge.role} #${badge.id}`}
+              >
+                <Bell size={15} className="text-orange" />
+                <span style={{ fontSize: '12px', fontWeight: 600 }}>Alerts</span>
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      background: '#dc2626',
+                      color: '#fff',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: '999px',
+                      marginLeft: '2px',
+                    }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+
               {/* Active Demo Identity Switcher Pill */}
               <button
                 type="button"
@@ -502,6 +588,142 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
                 onClick={() => setIdentityModalOpen(false)}
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feature B: In-App Notifications Modal */}
+      {notificationsOpen && (
+        <div className="modal-backdrop" onClick={() => setNotificationsOpen(false)}>
+          <div
+            className="modal-card modal-card-lg"
+            style={{ maxWidth: '640px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}
+            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div className="modal-header">
+              <div>
+                <span className="modal-eyebrow">IN-APP ALERTS &amp; REMINDERS</span>
+                <h3 className="modal-title">
+                  Notifications for {badge.role} #{badge.id} ({badge.name})
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-btn"
+                onClick={() => setNotificationsOpen(false)}
+                aria-label="Close notifications"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', gap: '8px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '12px', color: '#475569' }}>
+                  <strong>{unreadCount}</strong> unread of <strong>{notifications.length}</strong> total alerts
+                </span>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary-sm"
+                    onClick={handleRunDueReminders}
+                    disabled={notifLoading}
+                  >
+                    <RefreshCw size={13} />
+                    <span>Check Due Reminders</span>
+                  </button>
+                  {unreadCount > 0 && (
+                    <button
+                      type="button"
+                      className="btn-orange-primary btn-sm"
+                      onClick={handleMarkAllRead}
+                      disabled={notifLoading}
+                    >
+                      <CheckCircle2 size={13} />
+                      <span>Mark All Read</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {notifLoading ? (
+                <p style={{ fontSize: '13px', color: '#64748b' }}>Loading notifications...</p>
+              ) : notifications.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                  <Bell size={28} className="text-orange" style={{ marginBottom: '8px' }} />
+                  <p style={{ margin: 0, fontSize: '13px', color: '#475569', fontWeight: 600 }}>
+                    No notifications yet for {badge.name}.
+                  </p>
+                  <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
+                    Deadline changes, document review actions, rollover decisions, and 5d/2d/1d/day-of reminders appear here automatically.
+                  </p>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {notifications.map((n) => (
+                    <div
+                      key={n.notification_id}
+                      style={{
+                        padding: '10px 12px',
+                        borderRadius: '8px',
+                        border: n.is_read ? '1px solid #e2e8f0' : '1px solid #fdba74',
+                        background: n.is_read ? '#ffffff' : '#fff7ed',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'flex-start',
+                        gap: '10px',
+                      }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          {!n.is_read && (
+                            <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#ea580c', display: 'inline-block' }} />
+                          )}
+                          <strong style={{ fontSize: '13px', color: '#0f172a' }}>{n.title}</strong>
+                          <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '999px', background: '#f1f5f9', color: '#475569', fontWeight: 600 }}>
+                            {n.notification_type}
+                          </span>
+                          {n.booking_id && (
+                            <span style={{ fontSize: '11px', color: '#ea580c', fontWeight: 600 }}>
+                              Booking #{n.booking_id}
+                            </span>
+                          )}
+                        </div>
+                        <p style={{ margin: '4px 0', fontSize: '12px', color: '#334155', lineHeight: 1.4 }}>
+                          {n.message}
+                        </p>
+                        <span style={{ fontSize: '11px', color: '#64748b' }}>
+                          {new Date(n.created_at).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {!n.is_read && (
+                        <button
+                          type="button"
+                          className="btn-ghost-sm"
+                          onClick={() => handleMarkOneRead(n.notification_id)}
+                          style={{ whiteSpace: 'nowrap', fontSize: '11px' }}
+                        >
+                          Mark Read
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="btn-secondary-outline"
+                onClick={() => setNotificationsOpen(false)}
+              >
+                Close
               </button>
             </div>
           </div>
