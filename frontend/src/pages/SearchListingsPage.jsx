@@ -733,6 +733,15 @@ export default function SearchListingsPage() {
                           <strong>{new Date(item.arrival_date).toLocaleDateString()}</strong>
                         </div>
                       </div>
+                      <div className="schedule-pair">
+                        <Clock size={14} className="text-orange" />
+                        <div>
+                          <span className="metric-caption">Booking Cutoff</span>
+                          <strong style={{ color: isExpired ? '#dc2626' : 'inherit' }}>
+                            {new Date(item.cutoff_date).toLocaleDateString()}
+                          </strong>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="listing-schedule-col">
@@ -770,7 +779,7 @@ export default function SearchListingsPage() {
                       <span className="est-price-label">
                         {requiredCbm && requiredWeightTonnes
                           ? 'Estimated Base Freight'
-                          : 'Starting Price'}
+                          : 'Starting Base Rate'}
                       </span>
                       <strong className="est-price-value">
                         ${Number(item.estimated_total_price || item.minimum_charge).toFixed(2)}
@@ -787,12 +796,13 @@ export default function SearchListingsPage() {
                         type="button"
                         className="btn-secondary-sm"
                         onClick={() => handleToggleListingQuote(item.listing_id)}
+                        title="Expand estimated cost breakdown with surcharges"
                       >
                         <Calculator size={14} />
                         <span>
                           {expandedQuoteListingId === item.listing_id
-                            ? 'Hide Quote'
-                            : 'Itemised Quote'}
+                            ? 'Hide Breakdown'
+                            : 'View Price Breakdown'}
                         </span>
                       </button>
 

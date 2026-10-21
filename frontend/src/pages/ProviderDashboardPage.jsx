@@ -679,16 +679,18 @@ export default function ProviderDashboardPage() {
                       <div className="provider-status-controls">
                         <button
                           type="button"
-                          className="btn-secondary-sm"
+                          className="btn-orange-primary btn-sm"
                           onClick={() => setPricingEditorListing(item)}
+                          title="Configure itemised charges and pricing rules"
                         >
                           <SlidersHorizontal size={13} />
-                          <span>Itemised Pricing</span>
+                          <span>Manage Pricing</span>
                         </button>
                         <button
                           type="button"
                           className="btn-secondary-sm"
                           onClick={() => setScheduleEditorListing(item)}
+                          title="Configure voyage deadlines, CFS details, and rollover policy"
                         >
                           <Clock size={13} />
                           <span>Schedule &amp; CFS</span>
@@ -710,7 +712,7 @@ export default function ProviderDashboardPage() {
                             disabled={updatingListingId === item.listing_id}
                             onClick={() => handleStatusChange(item.listing_id, 'closed')}
                           >
-                            Close Listing
+                            Close
                           </button>
                         )}
                         {canCancel && (

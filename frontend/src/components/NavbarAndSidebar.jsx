@@ -280,33 +280,18 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
               >
                 Find Capacity
               </NavLink>
+              <NavLink
+                to="/bookings"
+                className={({ isActive }) => `topbar-link ${isActive ? 'active' : ''}`}
+              >
+                My Bookings
+              </NavLink>
               <button
                 type="button"
                 className="topbar-link topbar-link-btn"
                 onClick={() => scrollToSection('how-it-works')}
               >
                 How It Works
-              </button>
-              <button
-                type="button"
-                className="topbar-link topbar-link-btn"
-                onClick={() => scrollToSection('for-providers')}
-              >
-                For Providers
-              </button>
-              <button
-                type="button"
-                className="topbar-link topbar-link-btn"
-                onClick={() => scrollToSection('for-traders')}
-              >
-                For Traders
-              </button>
-              <button
-                type="button"
-                className="topbar-link topbar-link-btn"
-                onClick={() => scrollToSection('marketplace-preview')}
-              >
-                Marketplace
               </button>
             </nav>
 

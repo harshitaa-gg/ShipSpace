@@ -2097,23 +2097,37 @@ code {
 .status-confirmed {
   background: #dcfce7;
   color: #15803d;
+  border: 1px solid #bbf7d0;
 }
 
-.status-full,
+.status-full {
+  background: #ede9fe;
+  color: #6d28d9;
+  border: 1px solid #ddd6fe;
+}
+
 .status-pending {
   background: #fef3c7;
   color: #b45309;
+  border: 1px solid #fde68a;
 }
 
-.status-closed,
+.status-closed {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
 .status-completed {
   background: #e0f2fe;
   color: #0369a1;
+  border: 1px solid #bae6fd;
 }
 
 .status-cancelled {
   background: #fee2e2;
   color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 .listing-route-box {
@@ -4350,6 +4364,20 @@ code {
    ============================================================================ */
 
 @media (max-width: 1200px) {
+  .topbar-inner {
+    padding: 0 16px;
+    gap: 12px;
+  }
+  .topbar-brand-tagline,
+  .topbar-brand-divider {
+    display: none;
+  }
+  .topbar-actions-group {
+    gap: 16px;
+  }
+  .topbar-links {
+    gap: 16px;
+  }
   .hero-container {
     grid-template-columns: 1fr 380px;
   }

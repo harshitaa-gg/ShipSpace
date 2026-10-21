@@ -26,6 +26,37 @@ function toLocalDatetimeValue(iso) {
   )}:${pad(d.getMinutes())}`;
 }
 
+function toIsoFromInput(localDt) {
+  if (!localDt) return '';
+  const d = new Date(localDt);
+  if (Number.isNaN(d.getTime())) return localDt;
+  return d.toISOString();
+}
+
+function getMilestoneDisplayStatus(milestone) {
+  if (milestone.status === 'completed') {
+    return { label: 'Completed', className: 'status-badge status-confirmed' };
+  }
+  if (milestone.status === 'missed') {
+    return { label: 'Missed', className: 'status-badge status-cancelled' };
+  }
+  if (milestone.status === 'waived') {
+    return { label: 'Waived', className: 'status-badge' };
+  }
+  if (milestone.status === 'rolled') {
+    return { label: 'Rolled Over', className: 'status-badge status-pending' };
+  }
+  const now = Date.now();
+  const due = new Date(milestone.current_due_at).getTime();
+  if (due < now) {
+    return { label: 'Missed', className: 'status-badge status-cancelled' };
+  }
+  if (due - now <= 48 * 60 * 60 * 1000) {
+    return { label: 'Due Soon', className: 'status-badge status-pending' };
+  }
+  return { label: 'Upcoming', className: 'status-badge status-open' };
+}
+
 export default function BookingTimelineAndDocsModal({
   booking,
   role = 'trader', // 'trader' | 'provider'
@@ -419,6 +450,45 @@ export default function BookingTimelineAndDocsModal({
         </div>
 
         <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {/* Booking Overview Summary Strip */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+              gap: '10px',
+              padding: '12px 14px',
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '8px',
+              fontSize: '12px',
+            }}
+          >
+            <div>
+              <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Shipment Route</span>
+              <strong style={{ color: '#0f172a' }}>
+                {booking?.origin_port_code || 'Origin'} &rarr; {booking?.destination_port_code || 'Destination'}
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Booking Status</span>
+              <span className={`status-badge status-${booking?.booking_status || 'open'}`}>
+                {booking?.booking_status || 'confirmed'}
+              </span>
+            </div>
+            <div>
+              <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Reserved Capacity</span>
+              <strong style={{ color: '#0f172a' }}>
+                {Number(booking?.booked_cbm || 0).toFixed(2)} CBM &middot; {Number(booking?.booked_weight || 0).toFixed(2)} t
+              </strong>
+            </div>
+            <div>
+              <span style={{ color: '#64748b', display: 'block', fontSize: '11px' }}>Agreed Freight Total</span>
+              <strong style={{ color: '#ea580c', fontSize: '13px' }}>
+                ${Number(booking?.total_price || 0).toFixed(2)} USD
+              </strong>
+            </div>
+          </div>
+
           {feedback && (
             <div
               className={`alert-banner ${
@@ -519,6 +589,7 @@ export default function BookingTimelineAndDocsModal({
                           m.owner_role === 'shipper' &&
                           m.status !== 'completed';
                         const isEditing = editingMilestoneId === m.id;
+                        const statusObj = getMilestoneDisplayStatus(m);
 
                         return (
                           <div
@@ -553,9 +624,17 @@ export default function BookingTimelineAndDocsModal({
                                     {m.milestone_name}
                                   </strong>
                                   <span className="cargo-tag-chip">Owner: {m.owner_role}</span>
-                                  <span className={`status-badge status-${m.status === 'completed' ? 'confirmed' : m.status === 'missed' ? 'cancelled' : 'open'}`}>
-                                    {m.status}
+                                  <span className={statusObj.className}>
+                                    {statusObj.label}
                                   </span>
+                                  {isDueChanged && (
+                                    <span
+                                      className="status-badge"
+                                      style={{ background: '#fffbeb', color: '#b45309', borderColor: '#fde68a' }}
+                                    >
+                                      Date Changed
+                                    </span>
+                                  )}
                                 </div>
 
                                 <div style={{ fontSize: '12px', color: '#334155', textAlign: 'right' }}>
@@ -566,7 +645,7 @@ export default function BookingTimelineAndDocsModal({
                                   </div>
                                   {isDueChanged && (
                                     <div style={{ color: '#b45309', fontSize: '11px' }}>
-                                      Frozen Original: {new Date(m.original_due_at).toLocaleString()}
+                                      Original Due: {new Date(m.original_due_at).toLocaleString()}
                                     </div>
                                   )}
                                 </div>
