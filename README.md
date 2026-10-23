@@ -225,6 +225,30 @@ cd frontend
 npm run build
 ```
 
+### 4. Running with Docker Compose
+
+ShipSpace includes a multi-container Docker Compose orchestration for the PostgreSQL database, Node.js/Express backend, and Nginx-served React frontend:
+
+```bash
+# 1. (Optional) Customize environment variables
+cp .env.example .env
+
+# 2. Build and start all services
+docker compose up -d --build
+
+# 3. Verify service health and container status
+docker compose ps
+docker compose logs -f
+
+# 4. Stop containers and preserve volumes
+docker compose down
+```
+
+Services exposed when running via Docker Compose:
+- **Frontend (Nginx / SPA):** `http://localhost:5173`
+- **Backend API:** `http://localhost:5000` (health check at `/api/health`)
+- **PostgreSQL Database:** `localhost:5432` (persistent data stored in `postgres_data` volume)
+
 ---
 
 ## 8. Automated Test Suite
