@@ -10,10 +10,15 @@ const {
 } = require("../middleware/validate");
 
 const createListing = asyncHandler(async (req, res) => {
-    const provider_id = parsePositiveInt(
-        req.body.provider_id ?? req.params.providerId,
-        "provider_id"
-    );
+    let provider_id;
+    if (req.user) {
+        provider_id = resolveVerifiedProviderId(req);
+    } else {
+        provider_id = parsePositiveInt(
+            req.body.provider_id ?? req.params.providerId,
+            "provider_id"
+        );
+    }
     const route_id = parsePositiveInt(req.body.route_id, "route_id");
     const departure_date = parseDateString(req.body.departure_date, "departure_date");
     const arrival_date = parseDateString(req.body.arrival_date, "arrival_date");
@@ -58,10 +63,15 @@ const createListing = asyncHandler(async (req, res) => {
 });
 
 const getProviderListings = asyncHandler(async (req, res) => {
-    const providerId = parsePositiveInt(
-        req.params.providerId ?? req.query.provider_id,
-        "provider_id"
-    );
+    let providerId;
+    if (req.user) {
+        providerId = resolveVerifiedProviderId(req);
+    } else {
+        providerId = parsePositiveInt(
+            req.params.providerId ?? req.query.provider_id,
+            "provider_id"
+        );
+    }
     const status = req.query.status ? String(req.query.status).trim().toLowerCase() : null;
 
     const listings = await providerService.getProviderListings(providerId, { status });
@@ -83,10 +93,15 @@ const getListingById = asyncHandler(async (req, res) => {
 });
 
 const getProviderBookings = asyncHandler(async (req, res) => {
-    const providerId = parsePositiveInt(
-        req.params.providerId ?? req.query.provider_id,
-        "provider_id"
-    );
+    let providerId;
+    if (req.user) {
+        providerId = resolveVerifiedProviderId(req);
+    } else {
+        providerId = parsePositiveInt(
+            req.params.providerId ?? req.query.provider_id,
+            "provider_id"
+        );
+    }
     const listing_id = parseOptionalPositiveInt(
         req.params.listingId ?? req.query.listing_id,
         "listing_id"
@@ -107,10 +122,15 @@ const getProviderBookings = asyncHandler(async (req, res) => {
 
 const updateListingStatus = asyncHandler(async (req, res) => {
     const listingId = parsePositiveInt(req.params.listingId, "listingId");
-    const providerId = parsePositiveInt(
-        req.body.provider_id ?? req.query.provider_id,
-        "provider_id"
-    );
+    let providerId;
+    if (req.user) {
+        providerId = resolveVerifiedProviderId(req);
+    } else {
+        providerId = parsePositiveInt(
+            req.body.provider_id ?? req.query.provider_id ?? req.params.providerId,
+            "provider_id"
+        );
+    }
     const status = parseNonEmptyString(req.body.status, "status", 20).toLowerCase();
 
     const updated = await providerService.updateListingStatus({
@@ -128,10 +148,15 @@ const updateListingStatus = asyncHandler(async (req, res) => {
 
 const cancelBookingByProvider = asyncHandler(async (req, res) => {
     const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
-    const providerId = parsePositiveInt(
-        req.body.provider_id ?? req.params.providerId ?? req.query.provider_id,
-        "provider_id"
-    );
+    let providerId;
+    if (req.user) {
+        providerId = resolveVerifiedProviderId(req);
+    } else {
+        providerId = parsePositiveInt(
+            req.body.provider_id ?? req.params.providerId ?? req.query.provider_id,
+            "provider_id"
+        );
+    }
     const reason =
         req.body && req.body.reason
             ? String(req.body.reason).trim()
@@ -151,6 +176,41 @@ const cancelBookingByProvider = asyncHandler(async (req, res) => {
 });
 
 function resolveVerifiedProviderId(req) {
+    if (req.user) {
+        if (req.user.role !== "provider" && req.user.role !== "admin") {
+            throw new AppError(
+                "Forbidden: This action requires a logistics provider or platform admin role",
+                403,
+                "FORBIDDEN_ROLE"
+            );
+        }
+        const authProviderId = Number(req.user.id);
+        const routeProviderId = req.params.providerId
+            ? parsePositiveInt(req.params.providerId, "providerId")
+            : (req.query?.provider_id ? parsePositiveInt(req.query.provider_id, "provider_id") : null);
+        if (routeProviderId !== null && req.user.role !== "admin" && routeProviderId !== authProviderId) {
+            throw new AppError(
+                "Forbidden: Authenticated provider identity does not match requested route provider ID",
+                403,
+                "FORBIDDEN_OWNERSHIP"
+            );
+        }
+        if (req.body && req.body.provider_id !== undefined && req.body.provider_id !== null && req.body.provider_id !== "") {
+            const bodyProviderId = parsePositiveInt(req.body.provider_id, "body.provider_id");
+            if (req.user.role !== "admin" && bodyProviderId !== authProviderId) {
+                throw new AppError(
+                    "Forbidden: request body provider_id conflicts with authenticated provider identity",
+                    403,
+                    "FORBIDDEN_OWNERSHIP"
+                );
+            }
+        }
+        if (req.user.role === "admin" && routeProviderId !== null) {
+            return routeProviderId;
+        }
+        return authProviderId;
+    }
+
     const rawAuthProviderId =
         req.params.providerId ??
         req.headers["x-provider-id"] ??
@@ -281,14 +341,19 @@ const upsertListingSchedule = asyncHandler(async (req, res) => {
 
 const recordBookingRolloverDecision = asyncHandler(async (req, res) => {
     const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
-    const providerId = parsePositiveInt(
-        req.params.providerId ??
-            req.headers["x-provider-id"] ??
-            req.headers["x-user-id"] ??
-            req.body?.provider_id ??
-            req.query?.provider_id,
-        "provider_id"
-    );
+    let providerId;
+    if (req.user) {
+        providerId = resolveVerifiedProviderId(req);
+    } else {
+        providerId = parsePositiveInt(
+            req.params.providerId ??
+                req.headers["x-provider-id"] ??
+                req.headers["x-user-id"] ??
+                req.body?.provider_id ??
+                req.query?.provider_id,
+            "provider_id"
+        );
+    }
     const body = req.body || {};
     const missedMilestoneId = parseOptionalPositiveInt(
         body.missed_milestone_id ?? body.missedMilestoneId,

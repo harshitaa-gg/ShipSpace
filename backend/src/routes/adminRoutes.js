@@ -1,8 +1,12 @@
 const express = require("express");
 const adminController = require("../controllers/adminController");
 const referenceController = require("../controllers/referenceController");
+const { authenticateToken, requireRole } = require("../middleware/auth");
 
 const router = express.Router();
+
+// Enforce authentication and Administrator role across all administrative endpoints
+router.use(authenticateToken, requireRole("admin"));
 
 // Executive KPI summary (v_admin_platform_summary)
 router.get("/summary", adminController.getPlatformSummary);

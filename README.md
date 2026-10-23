@@ -1,49 +1,100 @@
 # ShipSpace — LCL Shipping Capacity Marketplace
 
 **Space for every shipment.**  
-A database-centred full-stack **Less-than-Container-Load (LCL)** ocean freight capacity marketplace built with **PostgreSQL**, **Node.js + Express**, and **React + Vite**.
+A database-centred, production-grade full-stack **Less-than-Container-Load (LCL)** ocean freight capacity marketplace built with **PostgreSQL**, **Node.js + Express**, and **React + Vite**.
 
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14%2B-316192?logo=postgresql&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-Express_REST_API-339933?logo=nodedotjs&logoColor=white)
-![React](https://img.shields.io/badge/Frontend-React_%2B_Vite-61DAFB?logo=react&logoColor=0b1623)
+![React](https://img.shields.io/badge/Frontend-React_19_%2B_Vite-61DAFB?logo=react&logoColor=0b1623)
 ![DBMS](https://img.shields.io/badge/Architecture-BCNF_%7C_ACID_%7C_Row_Locking-f26522)
+![Security](https://img.shields.io/badge/Auth-JWT_%2B_Bcrypt_%2B_RBAC-22c55e)
+![Build & Tests](https://img.shields.io/badge/Tests-36%2F36_Passing-success)
 
 ---
 
 ## 1. Overview & Problem Statement
 
-In international maritime logistics, small and medium-sized exporters (**Traders**) frequently need to ship cargo volumes smaller than a full 20-foot or 40-foot shipping container (for example, **3 to 8 CBM** and **1 to 4 tonnes**). Chartering a full container (**FCL**) for partial loads is cost-prohibitive, while **Logistics Providers** (freight consolidators and NVOCCs) regularly sail containers with unutilized space.
+In global ocean logistics, small and medium enterprises (**Traders / Shippers**) frequently need to transport partial container loads (for example, **3 to 8 CBM** and **1 to 4 tonnes**). Booking a full container (**FCL**) for partial loads is cost-prohibitive, while **Logistics Providers** (freight consolidators and NVOCCs) regularly sail container vessels with underutilised capacity.
 
-**ShipSpace** solves this problem through a relational database-enforced LCL marketplace:
-- **Logistics Providers** publish spare container volume (**CBM**) and payload (**tonnes**) on directed port-to-port maritime routes with explicit booking cutoff dates, departure/arrival schedules, permitted cargo classifications, and tariff rates.
-- **Traders** search across global trade lanes, compare live vessel capacity and automatically computed freight quotes, reserve space under row-level concurrency locks, and track or cancel bookings with full capacity restoration.
-- **Administrators** maintain the master reference catalog (Seaports, Maritime Routes, Cargo Classifications) and monitor route-level and provider-level utilization and booking audit trails in real time.
+**ShipSpace** solves this imbalance through a relational database-enforced LCL marketplace:
+- **Logistics Providers** publish available container volume (**CBM**) and payload (**tonnes**) on directed maritime routes with explicit CFS cut-off dates, sailing schedules, permitted cargo classifications, and itemised freight tariffs.
+- **Traders** search global trade lanes with multi-constraint filters (origin, destination, CBM, weight, cargo readiness), inspect itemised all-in cost quotes, reserve capacity under atomic row locks, upload required export documents, and track shipment milestones.
+- **Platform Administrators** govern the master reference catalog (Seaports, UN/LOCODEs, Maritime Routes, Cargo Types, Standard Charges, Milestone Types), manage user accounts, and inspect platform-wide audit logs and capacity utilization in real time.
 
 ---
 
-## 2. System Architecture
+## 2. Key Features
+
+### Core Marketplace & Concurrency Engine
+- **Atomic Space Reservation:** Enforces concurrency serialization via PostgreSQL row-level locks (`SELECT ... FOR UPDATE` on `capacity_listing`). Two concurrent bookings competing for remaining space cannot overcommit capacity.
+- **Automatic Capacity Restoration:** Cancelling a confirmed booking immediately restores the reserved CBM and weight back to the listing and reopens the listing status from `full` to `open`.
+- **Full Historical Audit Trail:** Every status change is captured in `booking_status_history` via database triggers, recording timestamp, user ID, old/new statuses, and rationale.
+
+### Feature A: Itemised All-In Cost Pricing Engine (`sql/09_feature_a_all_in_cost.sql`)
+- **13 Standard Charge Types:** Categorised across Origin (`O`), Ocean Freight (`F`), Destination (`D`), and Storage (`S`) stages.
+- **Flexible Charge Bases:** Supports `per_cbm`, `per_tonne`, `per_w_m` (w/m revenue tonne), `flat_fee`, and `percentage`.
+- **Frozen Financial Snapshots:** When a booking is confirmed, itemised charge calculations are frozen into immutable `booking_charge_snapshot` rows. Subsequent price edits by the provider never alter historical bookings.
+- **Analytical View:** `v_booking_itemised_cost` aggregates origin charges, freight charges, destination fees, storage, and prepaid/collect splits without `1:M` join duplication.
+
+### Feature B: Shipment Timelines, Documents & Rollover Management (`sql/10_feature_b_timelines_docs_rollover.sql`)
+- **Configurable Milestone Timelines:** 7 standard milestone types seeded (`booking_confirmed`, `cfs_cargo_received`, `customs_cleared`, `vessel_departed`, `vessel_arrived`, `customs_destination_cleared`, `cargo_delivered`).
+- **Export Document Checklist:** Initialises standard document requirements (`commercial_invoice`, `packing_list`, `shipping_bill`, `bill_of_lading`, etc.) with secure private filesystem storage outside the web root (`backend/private_uploads/`).
+- **Provider Rollover Management:** When cargo misses cut-off, providers can record decisions (`accept`, `roll`, `cancel`) with reason logging, fee adjustments, and automated capacity transfers to next sailings.
+- **In-App Notifications & Reminders:** Automated reminder generation for upcoming cut-off dates and document requirements with read tracking.
+
+### Phase 1: Secure Authentication & Authorization
+- **Database Credential Verification:** `POST /api/auth/login` verifies real credentials against PostgreSQL `user_account` with `bcryptjs` (salt rounds = 10).
+- **Gradual Hash Migration:** Automatically and safely upgrades legacy SHA-256 and demo password hashes to bcrypt upon valid login without locking out accounts.
+- **JWT Authorization:** Issues cryptographically signed JSON Web Tokens containing verified identity and role.
+- **Fail-Safe Secrets:** Rejects missing or known development placeholder secrets with a fatal error in production mode (`NODE_ENV=production`).
+- **Role-Based Access Control (RBAC):** Server-side verification strictly limits admin, provider, and trader endpoints.
+- **Record Ownership Enforcement:** Prevents cross-trader booking tampering and cross-provider listing modifications (`403 FORBIDDEN_OWNERSHIP`).
+- **Frontend Route Guards:** React Router guards (`<ProtectedRoute>`) protect private dashboards and redirect unauthenticated users to `/login?redirect=...`.
+- **Production-Restricted CORS:** Configurable origin allowlisting via `CORS_ORIGIN` that fails closed against untrusted domains.
+
+---
+
+## 3. Technology Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Database** | PostgreSQL 14+ (BCNF normalized schema, Stored Procedures, Triggers, Views, Partial Indexes, Row Locking) |
+| **Backend Runtime** | Node.js (v18+) & Express 5 |
+| **Authentication & Security** | JSON Web Tokens (`jsonwebtoken`), `bcryptjs`, CORS middleware |
+| **Database Driver** | `pg` (Connection Pooling + Parameterized Queries + Transactions) |
+| **Frontend Framework** | React 19, Vite 6, React Router DOM 7 |
+| **UI & Styling** | Custom ShipSpace Navy-and-Orange CSS Design System, Lucide React Icons |
+| **Testing** | Node.js Native Test Runner (`node --test`), `assert/strict` |
+
+---
+
+## 4. System Architecture
 
 ```mermaid
-flowchart LR
-    subgraph Client["React + Vite Frontend (Port 5173)"]
-        UI["Role Portals\n• Home & Hero Search\n• Trader Search & Bookings\n• Provider Dashboard\n• Admin Analytics"]
-        CTX["IdentityContext\nLive Catalog & Demo Role Switcher"]
+flowchart TD
+    subgraph Client["React 19 + Vite Frontend (Port 5173)"]
+        UI["Role Portals\n• Home & Hero Search\n• Trader Search & Bookings\n• Provider Dashboard\n• Admin Overview\n• Login / Register"]
+        GUARD["ProtectedRoute\nRoute Guards & Role Redirects"]
+        CTX["IdentityContext\nAuth State, JWT Hydration & Catalog"]
     end
 
     subgraph Server["Node.js + Express API (Port 5000)"]
-        RTR["REST Routers\n/api/reference\n/api/trader\n/api/provider\n/api/admin"]
-        SVC["Service Layer\nParameterized SQL & Transactions"]
+        AUTH_MW["Security Middleware\n• CORS Origin Filter\n• authenticateToken (JWT)\n• requireRole (RBAC)"]
+        RTR["REST Routers\n/api/auth\n/api/reference\n/api/trader\n/api/provider\n/api/admin"]
+        SVC["Service Layer\n• authService\n• traderService\n• providerService\n• pricingEngine\n• timelineService"]
     end
 
     subgraph DB["PostgreSQL Database (shipspace schema)"]
-        TBL["14 Normalized Tables\n(BCNF / 3NF)"]
+        TBL["25+ Normalized Tables\n(BCNF / 3NF)"]
         PROC["Stored Procedures\n• sp_create_booking\n• sp_cancel_booking"]
-        TRG["Automated Triggers\n• Capacity Reservation & Restore\n• Tariff Snapshot Calculation\n• Immutable Audit Logging"]
-        VW["5 Analytical Views\n• Available Capacity\n• Provider & Route Utilization\n• Executive Platform Summary"]
+        TRG["Automated Triggers\n• Capacity Lock & Deduct\n• Capacity Restoration\n• Audit History Logging\n• Snapshot Freeze"]
+        VW["Analytical Views\n• v_trader_available_capacity\n• v_trader_bookings\n• v_booking_itemised_cost\n• v_provider_listing_utilization\n• v_admin_platform_summary"]
     end
 
-    UI <--> CTX
-    UI -- "HTTP JSON (/api)" --> RTR
+    UI --> GUARD
+    GUARD --> CTX
+    CTX -- "Bearer JWT" --> AUTH_MW
+    AUTH_MW --> RTR
     RTR --> SVC
     SVC --> PROC
     SVC --> VW
@@ -53,165 +104,219 @@ flowchart LR
 
 ---
 
-## 3. Database Engineering Highlights (DBMS Core)
+## 5. Database Engineering & Migration Sequence
 
-Unlike basic CRUD applications that enforce business rules only in frontend or middleware code, **ShipSpace enforces all core invariants inside PostgreSQL**:
+All database logic, constraints, procedures, and tables are defined in sequential SQL files under [`sql/`](file:///c:/Users/Harshita/Documents/smartLCL/sql).
 
-### 3.1 14-Table Normalized Relational Schema (`sql/01_schema.sql`)
-- **Supertype / Subtype Account Hierarchy:** `user_account` serves as the master identity table, with role-constrained subtype tables `provider`, `trader`, and `admin` linked via composite foreign keys `(id, role) REFERENCES user_account(id, role)`.
-- **Reference & Governance Tables:** `port` (validated against 5-character UN/LOCODE regex `^[A-Z]{2}[A-Z0-9]{3}$`), `route` (enforcing `origin_port_id <> destination_port_id`), `cargo_type`, and administrative association tables `admin_port`, `admin_route`, and `admin_cargo_type`.
-- **Marketplace & Operational Tables:** `capacity_listing`, `listing_cargo` (resolving the `M:N` relationship between listings and allowed cargo types), `booking`, and `booking_status_history`.
-- **Composite Foreign Key for Cargo Compatibility:** `booking(listing_id, cargo_type_id)` directly references `listing_cargo(listing_id, cargo_type_id)`, making it structurally impossible at the schema level to book a cargo classification not permitted on that listing.
+### Required Execution Order
 
-### 3.2 Tariff Calculation Formula
-Every search quote and confirmed booking computes freight charges using the database pricing rule:
-
-$$\text{Total Price} = \max\Big(\text{ROUND}(\text{booked\_cbm} \times \text{price\_per\_cbm},\ 2),\ \text{ROUND}(\text{booked\_weight} \times \text{price\_per\_tonne},\ 2),\ \text{minimum\_charge}\Big)$$
-
-When a booking is inserted, `trg_validate_and_reserve_booking` freezes `total_price` on the `booking` row as an **immutable historical price snapshot**.
-
-### 3.3 Stored Procedures & Triggers (`sql/05_functions_triggers.sql`)
-| Database Object | Type | Responsibility |
-| :--- | :--- | :--- |
-| `sp_create_booking` | Stored Procedure | Acquires `SELECT ... FOR UPDATE` row lock on `capacity_listing`, verifies `open` status, cutoff date, and remaining CBM/weight, and inserts the confirmed booking. |
-| `sp_cancel_booking` | Stored Procedure | Acquires `SELECT ... FOR UPDATE` row lock on `booking`, sets session context (`shipspace.current_user_id`, `shipspace.status_change_reason`), and transitions status to `cancelled`. |
-| `trg_validate_and_reserve_booking` | `BEFORE INSERT` Trigger on `booking` | Locks listing row, validates cutoff/capacity/cargo compatibility, computes `total_price`, decrements `available_cbm` & `available_weight`, and transitions listing status to `full` when either dimension reaches `0`. |
-| `trg_validate_booking_status_transition` | `BEFORE UPDATE` Trigger on `booking` | Protects immutable booking columns (`total_price`, `booked_cbm`, `booked_weight`, `trader_id`, `listing_id`) and enforces valid state transitions (`confirmed → cancelled` or `confirmed → completed`). |
-| `trg_restore_capacity_on_cancellation` | `AFTER UPDATE` Trigger on `booking` | Locks the associated `capacity_listing`, restores exact `booked_cbm` and `booked_weight` (bounded by `LEAST(total, available + booked)`), and reopens the listing from `full` to `open`. |
-| `trg_record_booking_status_history` | `AFTER INSERT OR UPDATE` Trigger on `booking` | Appends an immutable audit trail entry into `booking_status_history` recording old status, new status, acting user ID, timestamp, and reason. |
-
-### 3.4 Analytical Views (`sql/03_views.sql`)
-- **`v_trader_available_capacity`** — Aggregates open, pre-cutoff listings with origin/destination UN/LOCODEs and permitted cargo arrays without `1:M` join row duplication.
-- **`v_trader_bookings`** — Complete shipment details joining trader, provider, route, ports, cargo classification, and frozen price snapshot.
-- **`v_provider_listing_utilization`** — Listing-level CBM and weight utilization percentages, active booking counts, and committed revenue.
-- **`v_admin_capacity_overview`** — Pre-aggregates `route_listings` and `route_bookings` in separate CTEs to eliminate join multiplication when reporting route-level supply, demand, and revenue.
-- **`v_admin_platform_summary`** — Single-row executive KPI snapshot across all platform entities.
-
-### 3.5 Row-Level Concurrency Control (`Phase 6E`)
-- Concurrent booking requests targeting the last remaining CBM on a listing are serialized via `SELECT ... FOR UPDATE` row-level locking on `capacity_listing`.
-- Verified via multi-session `psql` concurrency scripts (`sql/test_concurrency_*.sql`) proving that when two sessions simultaneously request the remaining `2 CBM`, Session 1 commits while Session 2 blocks on the row lock and is cleanly rejected with SQLSTATE `P0001` once capacity hits `0`.
-
----
-
-## 4. Repository Structure
-
-```text
-smartLCL/
-├── sql/                                   # PostgreSQL Schema, Seed Data, Views, Triggers & Tests
-│   ├── 00_reset.sql                       # Schema reset script (for test database setup)
-│   ├── 01_schema.sql                      # 14-table normalized relational schema & constraints
-│   ├── 02_seed_data.sql                   # Realistic maritime seed data (12 ports, 24 routes, 45 listings)
-│   ├── 03_views.sql                       # 5 analytical & operational SQL views
-│   ├── 04_indexes.sql                     # B-Tree composite & partial indexes
-│   ├── 05_functions_triggers.sql          # Stored procedures (sp_create_booking, sp_cancel_booking) & triggers
-│   ├── 06_phase6a_queries.sql             # Multi-constraint search & analytical query suite
-│   ├── 07_phase6c_index_benchmark.sql     # EXPLAIN (ANALYZE, BUFFERS) benchmark workload
-│   └── test_concurrency_*.sql             # Two-session row-locking concurrency test suite
-├── backend/                               # Phase 7 Node.js + Express REST API
-│   ├── server.js                          # HTTP server entry point (Port 5000)
-│   ├── .env.example                       # Placeholder environment variables
-│   └── src/
-│       ├── app.js                         # Express app, CORS, health checks & route mounting
-│       ├── config/db.js                   # pg Pool + transactional helper (pool.withTransaction)
-│       ├── controllers/                   # Request validation & HTTP response formatting
-│       ├── services/                      # Parameterized SQL queries & stored procedure calls
-│       ├── routes/                        # Modular routers (reference, trader, provider, admin)
-│       └── middleware/                    # Centralized PostgreSQL SQLSTATE error mapping & validators
-├── frontend/                              # Phase 8 React + Vite Frontend Application
-│   ├── index.html                         # Root HTML shell
-│   ├── vite.config.js                     # Vite config (Port 5173 + /api proxy to Port 5000)
-│   ├── public/assets/                     # Hero world map & container vessel imagery
-│   └── src/
-│       ├── api/client.js                  # Centralized REST client & response normalizers
-│       ├── context/IdentityContext.jsx    # Live catalog state & Demo Session Identity Switcher
-│       ├── components/                    # NavbarAndSidebar, BookingModal, Footer
-│       ├── pages/                         # HomePage, SearchListingsPage, MyBookingsPage, ProviderDashboardPage, AdminOverviewPage
-│       └── styles/index.css               # Design system & responsive layout styles
-└── docs/                                  # Phase 1–6 Architecture, ER, Normalization & Concurrency Docs
-```
-
----
-
-## 5. REST API Reference (`http://localhost:5000/api`)
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/health` | Express API health check |
-| `GET` | `/api/health/db` | PostgreSQL connectivity, active database & schema check |
-| `GET` | `/api/ports` | List all registered seaports (`port`) |
-| `GET` | `/api/routes` | List all maritime shipping routes (`route`) |
-| `GET` | `/api/cargo-types` | List all cargo classifications (`cargo_type`) |
-| `GET` | `/api/trader/listings` | Browse all open capacity listings (`v_trader_available_capacity`) |
-| `GET` | `/api/trader/listings/search` | Multi-constraint search with live tariff calculation (`sort_by=price\|departure`) |
-| `POST` | `/api/trader/bookings` | Create a booking transactionally via `CALL sp_create_booking(...)` |
-| `GET` | `/api/trader/:traderId/bookings` | List bookings for a specific trader (`v_trader_bookings`) |
-| `GET` | `/api/bookings/:bookingId` | Inspect single booking details + `booking_status_history` audit trail |
-| `POST` | `/api/trader/bookings/:bookingId/cancel` | Cancel trader booking & restore capacity via `CALL sp_cancel_booking(...)` |
-| `GET` | `/api/provider/:providerId/listings` | List provider's capacity listings & utilization metrics (`v_provider_listing_utilization`) |
-| `POST` | `/api/provider/listings` | Publish a new capacity listing with allowed cargo types (transactional) |
-| `PATCH` | `/api/provider/listings/:listingId/status` | Update listing status (`open`, `closed`, `cancelled`) |
-| `GET` | `/api/provider/:providerId/bookings` | List trader bookings made on a provider's listings |
-| `POST` | `/api/provider/bookings/:bookingId/cancel` | Cancel booking on provider's listing & restore capacity via `sp_cancel_booking` |
-| `GET` | `/api/admin/summary` | Executive platform KPI summary (`v_admin_platform_summary`) |
-| `GET` | `/api/admin/capacity-overview` | Route-level utilization & revenue report (`v_admin_capacity_overview`) |
-| `GET` | `/api/admin/provider-utilization` | Provider listing utilization report (`v_provider_listing_utilization`) |
-| `GET` | `/api/admin/users` | Platform user directory (`?role=provider\|trader\|admin`) |
-| `GET` | `/api/admin/bookings/history` | Global booking status audit log (`booking_status_history`) |
-| `POST` | `/api/admin/ports` | Register a new seaport |
-| `POST` | `/api/admin/routes` | Create a new directed maritime route |
-| `POST` | `/api/admin/cargo-types` | Add a new cargo classification |
-
----
-
-## 6. Local Setup & Running the Project
-
-### Prerequisites
-- **PostgreSQL 14+**
-- **Node.js 18+** and **npm**
-
-### Step 1 — Initialize the PostgreSQL Database
-Run the SQL scripts in order against your target PostgreSQL database:
+To set up a fresh database, execute the SQL files in this exact sequence:
 
 ```bash
-psql -U postgres -d your_database_name -f sql/01_schema.sql
-psql -U postgres -d your_database_name -f sql/02_seed_data.sql
-psql -U postgres -d your_database_name -f sql/03_views.sql
-psql -U postgres -d your_database_name -f sql/04_indexes.sql
-psql -U postgres -d your_database_name -f sql/05_functions_triggers.sql
+# Set your target database connection
+export PGDATABASE="shipspace_test_phase5"
+export PGUSER="postgres"
+
+# 1. Base Schema (14 Normalized Core Tables)
+psql -v ON_ERROR_STOP=1 -f sql/01_schema.sql
+
+# 2. Seed Data (Ports, Routes, Accounts, Listings)
+psql -v ON_ERROR_STOP=1 -f sql/02_seed_data.sql
+
+# 3. Core Operational & Analytical Views
+psql -v ON_ERROR_STOP=1 -f sql/03_views.sql
+
+# 4. Indexes (B-Tree Composite & Partial Indexes)
+psql -v ON_ERROR_STOP=1 -f sql/04_indexes.sql
+
+# 5. Functions & Triggers (sp_create_booking, sp_cancel_booking, capacity triggers)
+psql -v ON_ERROR_STOP=1 -f sql/05_functions_triggers.sql
+
+# 6. Feature A: Itemised All-In Cost Pricing Engine
+psql -v ON_ERROR_STOP=1 -f sql/09_feature_a_all_in_cost.sql
+
+# 7. Feature B: Timelines, Document Checklists & Rollover Management
+psql -v ON_ERROR_STOP=1 -f sql/10_feature_b_timelines_docs_rollover.sql
 ```
 
-### Step 2 — Configure & Start the Express Backend (`Port 5000`)
+> **Note on Safety:** Never run `sql/00_reset.sql` against an existing production or evaluation database containing live bookings.
+
+---
+
+## 6. Environment Configuration
+
+### Backend Configuration (`backend/.env`)
+
+Copy `backend/.env.example` to `backend/.env`:
+
+```bash
+cp backend/.env.example backend/.env
+```
+
+Configure the following variables in `backend/.env`:
+
+```env
+# Server Port
+PORT=5000
+
+# PostgreSQL Connection
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=shipspace_test_phase5
+DB_USER=your_postgres_username
+DB_PASSWORD=your_postgres_password
+
+# JWT Authentication
+JWT_SECRET=your_secure_random_jwt_secret_min_32_characters
+JWT_EXPIRES_IN=24h
+
+# Allowed CORS Origins (comma-separated for production)
+CORS_ORIGIN=http://localhost:5173
+```
+
+### Frontend Configuration (`frontend/.env`)
+
+Copy `frontend/.env.example` to `frontend/.env`:
+
+```bash
+cp frontend/.env.example frontend/.env
+```
+
+```env
+# Backend API Base URL
+VITE_API_BASE_URL=http://localhost:5000/api
+```
+
+---
+
+## 7. Installation & Running
+
+### Prerequisites
+- **Node.js 18+** (Node 20+ or 24 recommended)
+- **npm** (v9+)
+- **PostgreSQL 14+**
+
+### 1. Start the Backend API Server
 
 ```bash
 cd backend
-cp .env.example .env
-# Edit backend/.env with your PostgreSQL credentials (DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, DB_SCHEMA=shipspace)
 npm install
-npm start
+npm run dev      # or: npm start
 ```
+The server will start on `http://localhost:5000`. You can verify connectivity at `http://localhost:5000/api/health/db`.
 
-Verify the backend is connected to PostgreSQL:
-- Open `http://localhost:5000/api/health/db`
+### 2. Start the Frontend Application
 
-### Step 3 — Configure & Start the React Frontend (`Port 5173`)
-
-Open a second terminal from the project root:
+In a separate terminal:
 
 ```bash
 cd frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
-
 Open **`http://localhost:5173`** in your browser.
+
+### 3. Production Frontend Build
+
+To verify compilation and generate production assets:
+
+```bash
+cd frontend
+npm run build
+```
 
 ---
 
-## 7. Walkthrough of Frontend Portals
+## 8. Automated Test Suite
 
-1. **Home (`/`)**: Hero search card populated with live seaports and cargo classifications, platform overview, and quick navigation.
-2. **Search Listings (`/search`)**: Filter open capacity listings or run an exact 5-parameter tariff search (with a 1-click **Sample: INNSA → NLRTM** preset), toggle weight between **Tonnes (`t`)** and **Kilograms (`kg`)**, sort by price or departure date, and reserve space via the interactive **Booking Modal**.
-3. **My Bookings (`/bookings`)**: View reservations for any seeded Trader account, inspect the trigger-generated **Audit Trail (`booking_status_history`)**, and cancel confirmed bookings with automatic capacity restoration.
-4. **Provider Dashboard (`/provider`)**: Monitor fleet CBM utilization and revenue, close/reopen listings, manage trader bookings, and publish new capacity listings.
-5. **Admin Overview (`/admin`)**: View executive KPIs, route-by-route capacity utilization, provider utilization tables, the global booking status audit log, user directory, and reference catalog creation forms.
+ShipSpace includes a comprehensive automated test suite covering pricing calculations, capacity snapshot freezes, concurrent listing statuses, JWT authentication, role-based access, and cross-user ownership isolation.
+
+To run all backend tests:
+
+```bash
+cd backend
+npm test
+```
+
+### Test Coverage Summary (36/36 Passing):
+- **Authentication & Security (`tests/auth.test.js`):**
+  - Valid demo login & bcrypt hash upgrade
+  - Invalid password & validation rejection
+  - Missing credentials & short password rejection
+  - Unauthenticated admin rejection (`401`)
+  - Invalid Bearer token rejection (`401`)
+  - Role-based authorization violations (`403 FORBIDDEN_ROLE`)
+  - Cross-user listing tampering rejection (`403 FORBIDDEN_OWNERSHIP`)
+  - Authenticated admin summary access
+  - Verified user profile lookup (`/api/auth/me`)
+  - Production `JWT_SECRET` fail-safe validation
+  - Cross-trader timeline access rejection (`403`)
+  - Cross-user notifications access rejection (`403`)
+  - Cross-provider rollover and booking inspection rejection (`403`)
+- **Booking Charge Snapshots (`tests/feature_a_booking_snapshots.test.js`):**
+  - Atomic charge snapshot creation & view verification
+  - Legacy listing backward compatibility
+  - Transaction rollback on snapshot failure
+  - Protection against post-booking price alterations
+  - Capacity restoration on cancellation with snapshot preservation
+- **Pricing Engine & Quotes (`tests/feature_a_pricing_engine.test.js`):**
+  - Minimum charge behavior & tariff rounding
+  - W/M, CBM, weight, and flat fee pricing calculations
+  - Negative and invalid input rejection
+  - 13 standard charge types catalog verification
+  - Provider pricing rules persistence
+- **Listing Status & Concurrency (`tests/phase2a_listing_status.test.js`):**
+  - Reopen validation for zero-weight and zero-CBM listings
+  - Past cutoff reopen rejection
+  - Concurrent status updates under row locks
+  - UI action button state verification
+
+---
+
+## 9. Demo Accounts & Seed Credentials
+
+For quick evaluation during demonstrations, seeded test accounts are configured with known demo passwords:
+
+| Role | Company / Name | Login Email | Demo Password | Default Dashboard |
+| :--- | :--- | :--- | :--- | :--- |
+| **Trader** | Aarav Textiles Ltd | `shipping@aaravtextiles.in` | `demopass123` | `/bookings` |
+| **Trader** | Bharat Automotive Exports | `logistics@bharatauto.com` | `demopass123` | `/bookings` |
+| **Provider** | Maersk LCL Consolidators | `ops.india@maersk-lcl.com` | `demopass123` | `/provider` |
+| **Provider** | MSC Ocean Freight Direct | `msc.lcl@msc.com` | `demopass123` | `/provider` |
+| **Admin** | ShipSpace Governance Admin | `superadmin@shipspace.internal` | `demopass123` | `/admin` |
+
+*Note: On first login, each legacy seeded password hash is automatically upgraded in PostgreSQL to bcrypt with 10 salt rounds.*
+
+---
+
+## 10. Demo Walkthrough & Key Workflows
+
+1. **Marketplace Capacity Search (`/search`):**
+   - Filter listings by origin, destination, CBM, weight, and cargo type.
+   - Live tariff comparison between lowest price and earliest departure.
+2. **Itemised All-In Cost Quote (`/search` → "Get Quote"):**
+   - View transparent itemised breakdown across origin CFS fees, ocean freight, destination terminal handling, and documentation.
+   - Payer split shows exact prepaid shipper fees vs. collect consignee charges.
+3. **Trader Booking & Milestone Timeline (`/bookings`):**
+   - Confirm bookings under transactional locks.
+   - Track live vertical milestone timeline (`booking_confirmed` → `cfs_cargo_received` → `customs_cleared` → `vessel_departed` → `cargo_delivered`).
+   - Upload export documents (Commercial Invoice, Packing List, Shipping Bill) stored securely in `backend/private_uploads/`.
+4. **Provider Schedule & Rollover Management (`/provider`):**
+   - Manage vessel cut-off dates, CFS gate-in deadlines, and rollover policies (`flexible_rollover`, `strict_cutoff`, `fee_based_rollover`).
+   - If cargo misses cut-off, record operator decisions (`accept`, `roll`, `cancel`) and seamlessly re-allocate space.
+5. **Admin Governance & Capacity Analytics (`/admin`):**
+   - Inspect platform KPIs, route-level utilization heatmaps, global booking status audit trails, and reference entity catalogs.
+
+---
+
+## 11. Security & Compliance Notes
+
+- **Secrets Management:** `.env` and `backend/.env` files are ignored by Git. Never commit production credentials.
+- **Private Uploads:** Uploaded commercial documents are stored outside the web root (`backend/private_uploads/`) and are accessible only to verified booking owners and administrators.
+- **Database Backups:** Local `.dump` and `.backup` files are excluded by `.gitignore`.
+
+---
+
+## 12. License
+
+ISC License. Built for enterprise LCL maritime freight logistics demonstrations.

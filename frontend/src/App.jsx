@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { IdentityProvider } from './context/IdentityContext';
 import NavbarAndSidebar from './components/NavbarAndSidebar';
 import Footer from './components/Footer';
+import ProtectedRoute from './components/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import SearchListingsPage from './pages/SearchListingsPage';
 import MyBookingsPage from './pages/MyBookingsPage';
@@ -27,11 +28,37 @@ export default function App() {
           <div className="app-main-viewport">
             <main className="app-content-area">
               <Routes>
+                {/* Public Browsing & Marketplace Routes */}
                 <Route path="/" element={<HomePage />} />
                 <Route path="/search" element={<SearchListingsPage />} />
-                <Route path="/bookings" element={<MyBookingsPage />} />
-                <Route path="/provider" element={<ProviderDashboardPage />} />
-                <Route path="/admin" element={<AdminOverviewPage />} />
+
+                {/* Protected Role-Restricted Pages */}
+                <Route
+                  path="/bookings"
+                  element={
+                    <ProtectedRoute allowedRoles={['trader', 'admin']}>
+                      <MyBookingsPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/provider"
+                  element={
+                    <ProtectedRoute allowedRoles={['provider', 'admin']}>
+                      <ProviderDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute allowedRoles={['admin']}>
+                      <AdminOverviewPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Authentication Pages */}
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />

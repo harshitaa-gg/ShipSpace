@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { ShipSpaceLogoIcon } from '../components/NavbarAndSidebar';
 import { useIdentity } from '../context/IdentityContext';
+import { api } from '../api/client';
 
 export default function LoginPage() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export default function LoginPage() {
     setSelectedProviderId,
     setSelectedAdminId,
     setActiveRole,
+    refreshCatalog,
   } = useIdentity();
   const [role, setRole] = useState(initialRole); // 'trader' | 'provider' | 'admin'
   const [email, setEmail] = useState('');
@@ -40,6 +42,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState(null);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({});
 
@@ -73,12 +76,13 @@ export default function LoginPage() {
     if (newRole === 'provider') {
       setEmail('ops.india@maersk-lcl.com');
     } else if (newRole === 'admin') {
-      setEmail('admin@shipspace.internal');
+      setEmail('superadmin@shipspace.internal');
     } else {
-      setEmail('aarav.exports@textiles.in');
+      setEmail('shipping@aaravtextiles.in');
     }
     setPassword('demopass123');
     setErrors({});
+    setLoginError(null);
   };
 
   const fillQuickDemo = (demoRole) => {
@@ -87,13 +91,14 @@ export default function LoginPage() {
       setEmail('ops.india@maersk-lcl.com');
       setPassword('providerpass123');
     } else if (demoRole === 'admin') {
-      setEmail('admin@shipspace.internal');
+      setEmail('superadmin@shipspace.internal');
       setPassword('adminpass123');
     } else {
-      setEmail('aarav.exports@textiles.in');
+      setEmail('shipping@aaravtextiles.in');
       setPassword('traderpass123');
     }
     setErrors({});
+    setLoginError(null);
   };
 
   const handleSubmit = async (e) => {
@@ -107,31 +112,44 @@ export default function LoginPage() {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setIsSubmitting(false);
+    setLoginError(null);
 
-      // Check if entered email matches any existing database user account
-      const matched = users.find(
-        (u) => (u.email || '').toLowerCase() === email.trim().toLowerCase()
-      );
-
-      const effectiveRole = matched?.role || role;
-      const targetUserId = matched ? Number(matched.user_id || matched.id) : null;
+    try {
+      const res = await api.login({ email: email.trim(), password });
+      const user = res.data?.user || res.data;
+      const targetUserId = Number(user.user_id || user.id);
+      const effectiveRole = user.role || role;
 
       if (effectiveRole === 'admin') {
-        setSelectedAdminId(targetUserId || 27);
+        setSelectedAdminId(targetUserId);
         setActiveRole('admin');
+      } else if (effectiveRole === 'provider') {
+        setSelectedProviderId(targetUserId);
+        setActiveRole('provider');
+      } else {
+        setSelectedTraderId(targetUserId);
+        setActiveRole('trader');
+      }
+
+      await refreshCatalog().catch(() => {});
+
+      const redirectTarget = searchParams.get('redirect');
+      if (redirectTarget && redirectTarget.startsWith('/') && !redirectTarget.startsWith('//')) {
+        navigate(redirectTarget);
+      } else if (effectiveRole === 'admin') {
         navigate('/admin');
       } else if (effectiveRole === 'provider') {
-        setSelectedProviderId(targetUserId || 1);
-        setActiveRole('provider');
         navigate('/provider');
       } else {
-        setSelectedTraderId(targetUserId || 7);
-        setActiveRole('trader');
         navigate('/bookings');
       }
-    }, 450);
+    } catch (err) {
+      setLoginError(
+        err.message || 'Invalid commercial email or password. Please verify your credentials and try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -364,6 +382,24 @@ export default function LoginPage() {
 
           {/* Login Form */}
           <form className="auth-form-card" onSubmit={handleSubmit} noValidate>
+            {loginError && (
+              <div
+                className="auth-inline-error-banner"
+                role="alert"
+                style={{
+                  padding: '10px 14px',
+                  background: '#fef2f2',
+                  border: '1px solid #f87171',
+                  borderRadius: '6px',
+                  color: '#b91c1c',
+                  marginBottom: '14px',
+                  fontSize: '13px',
+                }}
+              >
+                {loginError}
+              </div>
+            )}
+
             {/* Work Email Field */}
             <div className={`auth-field-group ${errors.email && touched.email ? 'has-error' : ''}`}>
               <label className="auth-field-label" htmlFor="login-email">

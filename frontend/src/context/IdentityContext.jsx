@@ -14,6 +14,17 @@ export function IdentityProvider({ children }) {
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [catalogError, setCatalogError] = useState(null);
 
+  // Authenticated user state & JWT verification
+  const [currentUser, setCurrentUser] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    try {
+      return Boolean(localStorage.getItem('shipspace_token'));
+    } catch {
+      return false;
+    }
+  });
+  const [authLoading, setAuthLoading] = useState(true);
+
   // Selected Demo Identities (populated from real database accounts and synced to localStorage)
   const [selectedTraderId, setSelectedTraderIdState] = useState(() => {
     try {
@@ -48,6 +59,12 @@ export function IdentityProvider({ children }) {
   });
   const [isIdentityModalOpen, setIsIdentityModalOpen] = useState(false);
 
+  const logout = useCallback(() => {
+    api.logout();
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  }, []);
+
   const setSelectedTraderId = useCallback((id) => {
     const num = Number(id);
     setSelectedTraderIdState(num);
@@ -75,17 +92,19 @@ export function IdentityProvider({ children }) {
     setLoadingCatalog(true);
     setCatalogError(null);
     try {
-      const [portsRes, routesRes, cargoRes, usersRes, summaryRes, healthRes] =
+      const [portsRes, routesRes, cargoRes, healthRes, usersRes, summaryRes, meRes] =
         await Promise.all([
           api.getPorts(),
           api.getRoutes(),
           api.getCargoTypes(),
-          api.getAdminUsers(),
-          api.getAdminSummary(),
           api.getDbHealth().catch(() => null),
+          api.getAdminUsers().catch(() => ({ data: [] })),
+          api.getAdminSummary().catch(() => ({ data: null })),
+          api.getMe().catch(() => ({ data: null })),
         ]);
 
       const fetchedUsers = usersRes.data || [];
+      const user = meRes.data || null;
       setPorts(portsRes.data || []);
       setRoutes(routesRes.data || []);
       setCargoTypes(cargoRes.data || []);
@@ -93,6 +112,20 @@ export function IdentityProvider({ children }) {
       setPlatformSummary(summaryRes.data || null);
       setDbHealth(healthRes);
       setDbConnected(Boolean(healthRes?.success || portsRes?.success));
+
+      setCurrentUser(user);
+      setIsAuthenticated(Boolean(user));
+
+      if (user) {
+        setActiveRole(user.role);
+        if (user.role === 'admin') {
+          setSelectedAdminId(Number(user.user_id ?? user.id));
+        } else if (user.role === 'provider') {
+          setSelectedProviderId(Number(user.user_id ?? user.id));
+        } else {
+          setSelectedTraderId(Number(user.user_id ?? user.id));
+        }
+      }
 
       // Ensure selected IDs correspond to actual existing users in the database
       const tradersList = fetchedUsers.filter((u) => u.role === "trader");
@@ -124,6 +157,7 @@ export function IdentityProvider({ children }) {
       setCatalogError(err.message || "Failed to load reference catalog from backend");
     } finally {
       setLoadingCatalog(false);
+      setAuthLoading(false);
     }
   }, [selectedTraderId, selectedProviderId, selectedAdminId]);
 
@@ -145,6 +179,10 @@ export function IdentityProvider({ children }) {
   return (
     <IdentityContext.Provider
       value={{
+        currentUser,
+        isAuthenticated,
+        authLoading,
+        logout,
         users,
         traders,
         providers,

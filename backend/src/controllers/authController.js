@@ -10,7 +10,7 @@ const register = asyncHandler(async (req, res) => {
         company_name,
         gst_tax_id,
         contact_phone,
-    } = req.body;
+    } = req.body || {};
 
     const user = await authService.registerUser({
         name,
@@ -29,6 +29,29 @@ const register = asyncHandler(async (req, res) => {
     });
 });
 
+const login = asyncHandler(async (req, res) => {
+    const { email, password } = req.body || {};
+
+    const result = await authService.loginUser({ email, password });
+
+    res.json({
+        success: true,
+        message: `Authenticated as ${result.user.name} (${result.user.role})`,
+        data: result,
+    });
+});
+
+const getMe = asyncHandler(async (req, res) => {
+    const user = await authService.getUserProfileById(req.user.id);
+
+    res.json({
+        success: true,
+        data: user,
+    });
+});
+
 module.exports = {
     register,
+    login,
+    getMe,
 };

@@ -25,6 +25,20 @@ phase4_test_log.txt
 dist/
 frontend/dist/
 
+# Database dumps and backups
+*.dump
+*.backup
+*.sql.bak
 shipspace_before_feature_a.dump
 shipspace_before_feature_b.dump
+
+# Private uploads
 backend/private_uploads/
+private_uploads/
+uploads/
+
+# OS and Editor artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

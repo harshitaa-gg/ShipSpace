@@ -122,11 +122,49 @@ const searchCapacity = asyncHandler(async (req, res) => {
     });
 });
 
+function resolveVerifiedTraderId(req) {
+    if (req.user) {
+        if (req.user.role !== "trader" && req.user.role !== "admin") {
+            throw new AppError(
+                "Forbidden: This action requires a cargo trader or platform admin role",
+                403,
+                "FORBIDDEN_ROLE"
+            );
+        }
+        const authTraderId = Number(req.user.id);
+        const routeTraderId = req.params.traderId ? parsePositiveInt(req.params.traderId, "traderId") : null;
+        if (routeTraderId !== null && req.user.role !== "admin" && routeTraderId !== authTraderId) {
+            throw new AppError(
+                "Forbidden: Authenticated trader identity does not match requested route trader ID",
+                403,
+                "FORBIDDEN_OWNERSHIP"
+            );
+        }
+        if (req.body && req.body.trader_id !== undefined && req.body.trader_id !== null && req.body.trader_id !== "") {
+            const bodyTraderId = parsePositiveInt(req.body.trader_id, "body.trader_id");
+            if (req.user.role !== "admin" && bodyTraderId !== authTraderId) {
+                throw new AppError(
+                    "Forbidden: Request body trader_id conflicts with authenticated trader identity",
+                    403,
+                    "FORBIDDEN_OWNERSHIP"
+                );
+            }
+        }
+        return authTraderId;
+    }
+
+    const raw =
+        req.headers["x-trader-id"] ??
+        req.headers["x-user-id"] ??
+        req.body?.trader_id ??
+        req.params?.traderId ??
+        req.query?.trader_id;
+
+    return parsePositiveInt(raw, "trader_id");
+}
+
 const createBooking = asyncHandler(async (req, res) => {
-    const trader_id = parsePositiveInt(
-        req.body.trader_id ?? req.params.traderId,
-        "trader_id"
-    );
+    const trader_id = resolveVerifiedTraderId(req);
     const listing_id = parsePositiveInt(req.body.listing_id, "listing_id");
     const cargo_type_id = parsePositiveInt(req.body.cargo_type_id, "cargo_type_id");
     const booked_cbm = parsePositiveNumber(req.body.booked_cbm, "booked_cbm");
@@ -148,10 +186,7 @@ const createBooking = asyncHandler(async (req, res) => {
 });
 
 const getTraderBookings = asyncHandler(async (req, res) => {
-    const traderId = parsePositiveInt(
-        req.params.traderId ?? req.query.trader_id,
-        "trader_id"
-    );
+    const traderId = resolveVerifiedTraderId(req);
     const status = req.query.status ? String(req.query.status).trim().toLowerCase() : null;
 
     const bookings = await traderService.getTraderBookings(traderId, { status });
@@ -164,11 +199,22 @@ const getTraderBookings = asyncHandler(async (req, res) => {
 
 const getBookingDetails = asyncHandler(async (req, res) => {
     const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
-    const trader_id = parseOptionalPositiveInt(
-        req.params.traderId ?? req.query.trader_id,
-        "trader_id"
-    );
-    const provider_id = parseOptionalPositiveInt(req.query.provider_id, "provider_id");
+    let trader_id = null;
+    let provider_id = null;
+
+    if (req.user) {
+        if (req.user.role === "trader") {
+            trader_id = Number(req.user.id);
+        } else if (req.user.role === "provider") {
+            provider_id = Number(req.user.id);
+        }
+    } else {
+        trader_id = parseOptionalPositiveInt(
+            req.params.traderId ?? req.query.trader_id,
+            "trader_id"
+        );
+        provider_id = parseOptionalPositiveInt(req.query.provider_id, "provider_id");
+    }
 
     const booking = await traderService.getBookingDetails(bookingId, {
         trader_id,
@@ -183,10 +229,7 @@ const getBookingDetails = asyncHandler(async (req, res) => {
 
 const cancelBookingByTrader = asyncHandler(async (req, res) => {
     const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
-    const traderId = parsePositiveInt(
-        req.body?.trader_id ?? req.params.traderId ?? req.query.trader_id,
-        "trader_id"
-    );
+    const traderId = resolveVerifiedTraderId(req);
     const reason =
         req.body && req.body.reason
             ? String(req.body.reason).trim()
@@ -247,6 +290,9 @@ const getListingQuote = asyncHandler(async (req, res) => {
 });
 
 function resolveActorIdFromReq(req) {
+    if (req.user) {
+        return Number(req.user.id);
+    }
     const raw =
         req.headers["x-user-id"] ??
         req.headers["x-provider-id"] ??
@@ -267,14 +313,26 @@ function resolveActorIdFromReq(req) {
 
 const getBookingTimeline = asyncHandler(async (req, res) => {
     const bookingId = parsePositiveInt(req.params.bookingId, "bookingId");
-    const traderId = parseOptionalPositiveInt(
-        req.params.traderId ?? req.headers["x-trader-id"] ?? req.query.trader_id,
-        "trader_id"
-    );
-    const providerId = parseOptionalPositiveInt(
-        req.params.providerId ?? req.headers["x-provider-id"] ?? req.query.provider_id,
-        "provider_id"
-    );
+    let traderId = null;
+    let providerId = null;
+
+    if (req.user) {
+        if (req.user.role === "trader") {
+            traderId = Number(req.user.id);
+        } else if (req.user.role === "provider") {
+            providerId = Number(req.user.id);
+        }
+        // If req.user.role === "admin", traderId and providerId remain null (full access)
+    } else {
+        traderId = parseOptionalPositiveInt(
+            req.params.traderId ?? req.headers["x-trader-id"] ?? req.query.trader_id,
+            "trader_id"
+        );
+        providerId = parseOptionalPositiveInt(
+            req.params.providerId ?? req.headers["x-provider-id"] ?? req.query.provider_id,
+            "provider_id"
+        );
+    }
 
     const timeline = await traderService.getBookingTimeline(bookingId, {
         traderId,
@@ -399,18 +457,42 @@ const processReminders = asyncHandler(async (req, res) => {
 });
 
 const getNotifications = asyncHandler(async (req, res) => {
-    const userId = parsePositiveInt(
-        req.params.userId ??
-            req.params.traderId ??
-            req.params.providerId ??
-            req.headers["x-user-id"] ??
-            req.headers["x-trader-id"] ??
-            req.headers["x-provider-id"] ??
-            req.query.user_id ??
-            req.query.trader_id ??
-            req.query.provider_id,
-        "user_id"
-    );
+    let userId;
+    if (req.user) {
+        userId = Number(req.user.id);
+        const requestedUserId = parseOptionalPositiveInt(
+            req.params.userId ??
+                req.params.traderId ??
+                req.params.providerId ??
+                req.query.user_id ??
+                req.query.trader_id ??
+                req.query.provider_id,
+            "user_id"
+        );
+        if (requestedUserId !== null && req.user.role !== "admin" && requestedUserId !== userId) {
+            throw new AppError(
+                "Forbidden: Cannot view notifications belonging to another user",
+                403,
+                "FORBIDDEN_OWNERSHIP"
+            );
+        }
+        if (req.user.role === "admin" && requestedUserId !== null) {
+            userId = requestedUserId;
+        }
+    } else {
+        userId = parsePositiveInt(
+            req.params.userId ??
+                req.params.traderId ??
+                req.params.providerId ??
+                req.headers["x-user-id"] ??
+                req.headers["x-trader-id"] ??
+                req.headers["x-provider-id"] ??
+                req.query.user_id ??
+                req.query.trader_id ??
+                req.query.provider_id,
+            "user_id"
+        );
+    }
     const unreadOnly =
         String(req.query.unread_only || "").toLowerCase() === "true" ||
         req.query.unread_only === "1";

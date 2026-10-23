@@ -105,6 +105,8 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
     activeProvider,
     activeAdmin,
     dbConnected,
+    isAuthenticated,
+    logout,
   } = useIdentity();
 
   const location = useLocation();
@@ -338,15 +340,29 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
                 <span className="identity-pill-name">#{badge.id} {badge.name}</span>
               </button>
 
-              {/* Sign In Navigation Link */}
-              <Link to="/login" className="topbar-signin-btn">
-                Sign In
-              </Link>
-
-              {/* Primary Get Started CTA Button */}
-              <Link to="/register" className="topbar-getstarted-btn">
-                Get Started
-              </Link>
+              {/* Sign In / Sign Out Navigation Link */}
+              {isAuthenticated ? (
+                <button
+                  type="button"
+                  className="topbar-signin-btn"
+                  onClick={() => {
+                    logout();
+                    navigate('/login');
+                  }}
+                  title="Sign out of ShipSpace"
+                >
+                  Sign Out
+                </button>
+              ) : (
+                <>
+                  <Link to="/login" className="topbar-signin-btn">
+                    Sign In
+                  </Link>
+                  <Link to="/register" className="topbar-getstarted-btn">
+                    Get Started
+                  </Link>
+                </>
+              )}
 
               {/* Mobile Drawer Hamburger */}
               <button
@@ -402,20 +418,36 @@ export default function NavbarAndSidebar({ sidebarCollapsed, onToggleSidebar }) 
               </button>
 
               <div className="mobile-drawer-actions">
-                <Link
-                  to="/login"
-                  className="btn-hero-outline full-width"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  <span>Sign In</span>
-                </Link>
-                <Link
-                  to="/register"
-                  className="btn-hero-primary full-width"
-                  onClick={() => setMobileNavOpen(false)}
-                >
-                  <span>Get Started</span>
-                </Link>
+                {isAuthenticated ? (
+                  <button
+                    type="button"
+                    className="btn-hero-outline full-width"
+                    onClick={() => {
+                      setMobileNavOpen(false);
+                      logout();
+                      navigate('/login');
+                    }}
+                  >
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <>
+                    <Link
+                      to="/login"
+                      className="btn-hero-outline full-width"
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <span>Sign In</span>
+                    </Link>
+                    <Link
+                      to="/register"
+                      className="btn-hero-primary full-width"
+                      onClick={() => setMobileNavOpen(false)}
+                    >
+                      <span>Get Started</span>
+                    </Link>
+                  </>
+                )}
                 <button
                   type="button"
                   className="btn-secondary-sm full-width"

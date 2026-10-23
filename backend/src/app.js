@@ -13,11 +13,59 @@ const authRoutes = require("./routes/authRoutes");
 const providerController = require("./controllers/providerController");
 const traderController = require("./controllers/traderController");
 const { notFoundHandler, errorHandler } = require("./middleware/errorHandler");
+const { optionalAuthenticateToken } = require("./middleware/auth");
 
 const app = express();
 
-app.use(cors());
+// Configure CORS to restrict allowed origins in production while supporting localhost in development
+const rawAllowedOrigins = process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS;
+const configuredOrigins = rawAllowedOrigins
+    ? rawAllowedOrigins.split(",").map((s) => s.trim()).filter(Boolean)
+    : [];
+
+const defaultDevOrigins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:5000",
+];
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server, unit tests)
+        if (!origin) return callback(null, true);
+
+        // If explicitly configured origins exist, check against them
+        if (configuredOrigins.length > 0) {
+            if (configuredOrigins.includes("*") || configuredOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+            return callback(new Error(`CORS policy: origin ${origin} is not allowed`));
+        }
+
+        // In non-production, allow localhost dev servers
+        if (process.env.NODE_ENV !== "production") {
+            if (
+                defaultDevOrigins.includes(origin) ||
+                /^http:\/\/localhost(:\d+)?$/.test(origin) ||
+                /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)
+            ) {
+                return callback(null, true);
+            }
+        }
+
+        // In production without configured origins, fail closed
+        return callback(new Error(`CORS policy: origin ${origin} is not allowed`));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "x-user-id", "x-provider-id", "x-trader-id"],
+};
+
+app.use(cors(corsOptions));
 app.use(express.json({ limit: "15mb" }));
+app.use(optionalAuthenticateToken);
 
 // ----------------------------------------------------------------------------
 // 1. Health & Connectivity Endpoints

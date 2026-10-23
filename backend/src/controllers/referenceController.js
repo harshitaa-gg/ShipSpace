@@ -1,5 +1,5 @@
 const referenceService = require("../services/referenceService");
-const { asyncHandler } = require("../middleware/errorHandler");
+const { AppError, asyncHandler } = require("../middleware/errorHandler");
 const {
     parsePositiveInt,
     parseOptionalPositiveInt,
@@ -17,10 +17,17 @@ const getPorts = asyncHandler(async (req, res) => {
 });
 
 const createPort = asyncHandler(async (req, res) => {
+    if (req.user && req.user.role !== "admin") {
+        throw new AppError(
+            "Forbidden: Only platform administrators can create reference ports",
+            403,
+            "FORBIDDEN_ROLE"
+        );
+    }
     const name = parseNonEmptyString(req.body.name, "name", 255);
     const country = parseNonEmptyString(req.body.country, "country", 100);
     const un_locode = parseUnLocode(req.body.un_locode, "un_locode");
-    const admin_id = parseOptionalPositiveInt(req.body.admin_id, "admin_id");
+    const admin_id = req.user ? Number(req.user.id) : parseOptionalPositiveInt(req.body.admin_id, "admin_id");
 
     const port = await referenceService.createPort({ name, country, un_locode, admin_id });
     res.status(201).json({
@@ -40,10 +47,17 @@ const getRoutes = asyncHandler(async (req, res) => {
 });
 
 const createRoute = asyncHandler(async (req, res) => {
+    if (req.user && req.user.role !== "admin") {
+        throw new AppError(
+            "Forbidden: Only platform administrators can create reference routes",
+            403,
+            "FORBIDDEN_ROLE"
+        );
+    }
     const origin_port_id = parsePositiveInt(req.body.origin_port_id, "origin_port_id");
     const destination_port_id = parsePositiveInt(req.body.destination_port_id, "destination_port_id");
     const typical_transit_days = parsePositiveInt(req.body.typical_transit_days, "typical_transit_days");
-    const admin_id = parseOptionalPositiveInt(req.body.admin_id, "admin_id");
+    const admin_id = req.user ? Number(req.user.id) : parseOptionalPositiveInt(req.body.admin_id, "admin_id");
 
     const route = await referenceService.createRoute({
         origin_port_id,
@@ -68,12 +82,19 @@ const getCargoTypes = asyncHandler(async (req, res) => {
 });
 
 const createCargoType = asyncHandler(async (req, res) => {
+    if (req.user && req.user.role !== "admin") {
+        throw new AppError(
+            "Forbidden: Only platform administrators can create cargo types",
+            403,
+            "FORBIDDEN_ROLE"
+        );
+    }
     const name = parseNonEmptyString(req.body.name, "name", 100);
     const description =
         req.body.description !== undefined && req.body.description !== null
             ? String(req.body.description).trim()
             : null;
-    const admin_id = parseOptionalPositiveInt(req.body.admin_id, "admin_id");
+    const admin_id = req.user ? Number(req.user.id) : parseOptionalPositiveInt(req.body.admin_id, "admin_id");
 
     const cargoType = await referenceService.createCargoType({ name, description, admin_id });
     res.status(201).json({

@@ -1,3 +1,7 @@
 node_modules/
 .env
-shipspace_before_feature_a.dump
+.env.*
+!.env.example
+*.dump
+*.backup
+private_uploads/

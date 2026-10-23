@@ -28,8 +28,10 @@ function buildQuery(params = {}) {
 
 async function request(path, options = {}) {
   const url = `${API_BASE_URL}${path}`;
+  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('shipspace_token') : null;
   const headers = {
     'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers || {}),
   };
 
@@ -153,7 +155,43 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     });
+    if (res.data?.token) {
+      try {
+        localStorage.setItem('shipspace_token', res.data.token);
+      } catch {}
+    }
     return { ...res, data: normalizeUser(res.data) };
+  },
+  login: async ({ email, password }) => {
+    const res = await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    if (res.data?.token) {
+      try {
+        localStorage.setItem('shipspace_token', res.data.token);
+      } catch {}
+    }
+    return {
+      ...res,
+      data: {
+        ...res.data,
+        user: normalizeUser(res.data?.user),
+      },
+    };
+  },
+  getMe: async () => {
+    const res = await request('/auth/me');
+    return { ...res, data: normalizeUser(res.data) };
+  },
+  logout: () => {
+    try {
+      localStorage.removeItem('shipspace_token');
+      localStorage.removeItem('shipspace_active_role');
+      localStorage.removeItem('shipspace_trader_id');
+      localStorage.removeItem('shipspace_provider_id');
+      localStorage.removeItem('shipspace_admin_id');
+    } catch {}
   },
 
   // Health & Reference Data
