@@ -32,6 +32,7 @@ export default function BookingModal({
   onBookingSuccess,
 }) {
   const {
+    currentUser,
     traders,
     selectedTraderId,
     setSelectedTraderId,
@@ -39,7 +40,11 @@ export default function BookingModal({
     refreshCatalog,
   } = useIdentity();
 
-  const [traderId, setTraderId] = useState(selectedTraderId || 7);
+  const isTraderRole = currentUser?.role === 'trader';
+  const authTraderId = isTraderRole ? Number(currentUser.user_id ?? currentUser.id) : null;
+  const initialEffectiveTraderId = authTraderId || selectedTraderId || 7;
+
+  const [traderId, setTraderId] = useState(initialEffectiveTraderId);
   const [cargoTypeId, setCargoTypeId] = useState(
     initialCargoTypeId ? String(initialCargoTypeId) : ''
   );
@@ -58,12 +63,14 @@ export default function BookingModal({
   const [errorMsg, setErrorMsg] = useState(null);
   const [createdBooking, setCreatedBooking] = useState(null);
 
-  // Sync traderId with context
+  // Sync traderId with context or authenticated user
   useEffect(() => {
-    if (selectedTraderId) {
+    if (authTraderId) {
+      setTraderId(authTraderId);
+    } else if (selectedTraderId) {
       setTraderId(selectedTraderId);
     }
-  }, [selectedTraderId]);
+  }, [authTraderId, selectedTraderId]);
 
   // Prevent background page scroll while modal is open
   useEffect(() => {
@@ -471,12 +478,14 @@ export default function BookingModal({
               <div className="form-group">
                 <label className="form-label" htmlFor="booking-trader-select">
                   <UserCheck size={14} /> Booking as Trader Account
+                  {isTraderRole && <span className="text-xs text-slate-500 font-normal ml-2">(Logged in)</span>}
                 </label>
                 <select
                   id="booking-trader-select"
                   className="form-select"
                   value={traderId}
                   onChange={(e) => setTraderId(Number(e.target.value))}
+                  disabled={isTraderRole}
                   required
                 >
                   {traders.map((t) => (
@@ -485,6 +494,11 @@ export default function BookingModal({
                     </option>
                   ))}
                 </select>
+                {isTraderRole && (
+                  <p className="form-help-text mt-1 text-xs text-slate-500">
+                    Bookings are submitted under your verified company profile.
+                  </p>
+                )}
               </div>
 
               {/* Cargo Type Selection */}

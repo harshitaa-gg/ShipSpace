@@ -205,8 +205,18 @@ function resolveVerifiedProviderId(req) {
                 );
             }
         }
-        if (req.user.role === "admin" && routeProviderId !== null) {
-            return routeProviderId;
+        if (req.user.role === "admin") {
+            const explicitProviderId =
+                routeProviderId ??
+                (req.body && req.body.provider_id !== undefined && req.body.provider_id !== null && req.body.provider_id !== ""
+                    ? parsePositiveInt(req.body.provider_id, "body.provider_id")
+                    : null) ??
+                (req.headers["x-provider-id"]
+                    ? parsePositiveInt(req.headers["x-provider-id"], "x-provider-id")
+                    : null);
+            if (explicitProviderId !== null) {
+                return explicitProviderId;
+            }
         }
         return authProviderId;
     }

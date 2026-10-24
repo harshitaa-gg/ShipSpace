@@ -150,6 +150,26 @@ function resolveVerifiedTraderId(req) {
                 );
             }
         }
+
+        // When authenticated as an administrator, honor the explicit target trader ID
+        if (req.user.role === "admin") {
+            const explicitTraderId =
+                routeTraderId ??
+                (req.body && req.body.trader_id !== undefined && req.body.trader_id !== null && req.body.trader_id !== ""
+                    ? parsePositiveInt(req.body.trader_id, "body.trader_id")
+                    : null) ??
+                (req.query?.trader_id
+                    ? parsePositiveInt(req.query.trader_id, "query.trader_id")
+                    : null) ??
+                (req.headers["x-trader-id"]
+                    ? parsePositiveInt(req.headers["x-trader-id"], "x-trader-id")
+                    : null);
+
+            if (explicitTraderId !== null) {
+                return explicitTraderId;
+            }
+        }
+
         return authTraderId;
     }
 
